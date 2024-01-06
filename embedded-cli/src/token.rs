@@ -1,3 +1,5 @@
+use crate::utils;
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct Tokens<'a> {
     empty: bool,
@@ -67,7 +69,9 @@ impl<'a> Tokens<'a> {
         }
 
         // SAFETY: bytes are still a valid utf8 sequence
-        let tokens = unsafe { core::str::from_utf8_unchecked_mut(&mut bytes[..insert]) };
+        // insert is inside bytes slice
+        let tokens =
+            unsafe { core::str::from_utf8_unchecked_mut(bytes.get_unchecked_mut(..insert)) };
         Some(Self { empty, tokens })
     }
 
@@ -106,18 +110,20 @@ impl<'a> Tokens<'a> {
             // SAFETY: bytes are kept valid utf8 during modification
             let bytes = unsafe { core::mem::take(&mut self.tokens).as_bytes_mut() };
             // move removed element to the end
-            bytes[cursor..].rotate_left(len + 1);
+            utils::rotate_left(&mut bytes[cursor..], len + 1);
             // SAFETY: bytes are kept valid utf8 during modification
             let bytes = unsafe { core::str::from_utf8_unchecked_mut(bytes) };
             let new_len = bytes.len() - len - 1;
             let (left, right) = bytes.split_at_mut(new_len);
             self.tokens = left;
-            Some(&mut right[..len])
+            // SAFETY: right is len + 1 length long (last byte is 0)
+            unsafe { Some(right.get_unchecked_mut(..len)) }
         } else {
             let bytes = core::mem::take(&mut self.tokens);
             if cursor > 0 {
                 let (left, right) = bytes.split_at_mut(cursor);
-                self.tokens = &mut left[..cursor - 1];
+                // SAFETY: left is cursor len, last byte is 0
+                self.tokens = unsafe { left.get_unchecked_mut(..cursor - 1) };
                 Some(right)
             } else {
                 self.empty = true;
@@ -147,8 +153,14 @@ impl<'a> Iterator for TokensIter<'a> {
             return None;
         }
         if let Some(pos) = self.args.as_bytes().iter().position(|&b| b == 0) {
-            let arg = &self.args[..pos];
-            self.args = &self.args[pos + 1..];
+            // SAFETY: pos is inside args slice
+            let (arg, other) = unsafe {
+                (
+                    self.args.get_unchecked(..pos),
+                    self.args.get_unchecked(pos + 1..),
+                )
+            };
+            self.args = other;
             Some(arg)
         } else {
             self.empty = true;

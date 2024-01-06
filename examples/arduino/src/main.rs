@@ -164,7 +164,14 @@ fn on_unknown(
 
 #[arduino_hal::entry]
 fn main() -> ! {
-    let dp = arduino_hal::Peripherals::take().unwrap();
+    try_run();
+
+    // if run failed, just do nothing
+    loop {}
+}
+
+fn try_run() -> Option<()> {
+    let dp = arduino_hal::Peripherals::take()?;
     let pins = arduino_hal::pins!(dp);
 
     let mut led = pins.d13.into_output();
@@ -187,7 +194,7 @@ fn main() -> ! {
         .command_buffer(command_buffer)
         .history_buffer(history_buffer)
         .build()
-        .unwrap();
+        .ok()?;
 
     // Create global state, that will be used for entire application
     let mut state = AppState { num_commands: 0 };
@@ -215,7 +222,7 @@ Use up and down for history navigation")
         // Command type is specified for autocompletion and help
         // Processor accepts closure where we can process parsed command
         // we can use different command and processor with each call
-        cli.process_byte::<Group, _>(
+        let _ = cli.process_byte::<Group, _>(
             byte,
             &mut Group::processor(|cli, command| {
                 match command {
@@ -225,7 +232,6 @@ Use up and down for history navigation")
                 }
                 Ok(())
             }),
-        )
-        .unwrap();
+        );
     }
 }

@@ -282,7 +282,9 @@ where
             C::autocomplete(request.clone(), autocompletion);
             match request {
                 Request::CommandName(name) if "help".starts_with(name) => {
-                    autocompletion.merge_autocompletion(&"help"[name.len()..])
+                    // SAFETY: "help" starts with name, so name cannot be longer
+                    let autocompleted = unsafe { "help".get_unchecked(name.len()..) };
+                    autocompletion.merge_autocompletion(autocompleted)
                 }
                 _ => {}
             }

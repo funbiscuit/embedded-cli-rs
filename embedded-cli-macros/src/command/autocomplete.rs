@@ -23,7 +23,11 @@ pub fn derive_autocomplete(target: &TargetType, commands: &[Command]) -> Result<
                         .iter()
                         .skip_while(|n| !n.starts_with(name))
                         .take_while(|n| n.starts_with(name))
-                        .for_each(|n| autocompletion.merge_autocompletion(&n[name.len()..]));
+                        .for_each(|n| {
+                            // SAFETY: n starts with name, so name cannot be longer
+                            let autocompleted = unsafe { n.get_unchecked(name.len()..) };
+                            autocompletion.merge_autocompletion(autocompleted)
+                        });
                 }
             }
         }

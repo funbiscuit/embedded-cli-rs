@@ -38,11 +38,14 @@ impl<'a, W: Write<Error = E>, E: Error> Writer<'a, W, E> {
     pub fn write_str(&mut self, mut text: &str) -> Result<(), E> {
         while !text.is_empty() {
             if let Some(pos) = text.as_bytes().iter().position(|&b| b == codes::LINE_FEED) {
-                let line = &text[..pos];
+                // SAFETY: pos is inside text slice
+                let line = unsafe { text.get_unchecked(..pos) };
 
                 self.writer.write_str(line)?;
                 self.writer.write_str(codes::CRLF)?;
-                text = &text[pos + 1..];
+                // SAFETY: pos is index of existing element so pos + 1 in worst case will be
+                // outside of slice by 1, which is safe (will give empty slice as result)
+                text = unsafe { text.get_unchecked(pos + 1..) };
                 self.dirty = false;
                 self.last_bytes = [0; 2];
             } else {
@@ -100,6 +103,13 @@ impl<'a, W: Write<Error = E>, E: Error> uWrite for Writer<'a, W, E> {
 
     fn write_str(&mut self, s: &str) -> Result<(), E> {
         self.write_str(s)
+    }
+}
+
+impl<'a, W: Write<Error = E>, E: Error> core::fmt::Write for Writer<'a, W, E> {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        self.write_str(s).map_err(|_| core::fmt::Error)?;
+        Ok(())
     }
 }
 

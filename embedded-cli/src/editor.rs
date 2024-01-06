@@ -1,6 +1,7 @@
 use crate::{
     autocomplete::{Autocompletion, Request},
     buffer::Buffer,
+    utils,
 };
 use core::{
     fmt::Debug,
@@ -43,7 +44,9 @@ impl<B: Buffer> Editor<B> {
             return;
         }
 
-        let (text, buf) = self.buffer.as_slice_mut().split_at_mut(self.valid);
+        // SAFETY: self.valid is always less than or equal to buffer len
+        let (text, buf) = unsafe { utils::split_at_mut(self.buffer.as_slice_mut(), self.valid) };
+
         // SAFETY: buffer stores only valid utf-8 bytes 0..valid range
         let text = unsafe { core::str::from_utf8_unchecked(text) };
 

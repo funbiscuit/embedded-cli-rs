@@ -14,4 +14,5 @@ Dual-licensed under [Apache 2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT).
 * History (navigate with up and down keypress)
 * Help (generated from doc comments)
 * Formatted write with [ufmt](https://github.com/japaric/ufmt)
+* No panicking branches in generated code, when optimized
 * Any byte-stream interface is supported (`embedded_io::Write` as output stream, input bytes are given one-by-one)

@@ -16,7 +16,7 @@ impl<'a> HelpRequest<'a> {
         let mut iter = tokens.iter();
 
         // check if first token is help
-        if tokens.iter().next() == Some("help") {
+        if iter.next() == Some("help") {
             drop(iter);
             // remove "help" token
             tokens.remove(0);
@@ -34,8 +34,8 @@ impl<'a> HelpRequest<'a> {
         }) {
             drop(iter);
             tokens.remove(pos + 1);
-            //
-            let command = tokens.remove(0).unwrap();
+            // SAFETY: first element always exists: we called .next() once in first if
+            let command = unsafe { tokens.remove(0).unwrap_unchecked() };
 
             Ok(HelpRequest::Command(command))
         } else {
@@ -71,11 +71,13 @@ mod tests {
     #[case("")]
     #[case("cmd1")]
     #[case("cmd1 help")]
+    #[case("--help")]
     fn parsing_err(#[case] input: &str) {
         let mut input = input.as_bytes().to_vec();
         let input = core::str::from_utf8_mut(&mut input).unwrap();
         let tokens = Tokens::new(input).unwrap();
-
-        assert!(HelpRequest::from_tokens(tokens).is_err());
+        let res = HelpRequest::from_tokens(tokens);
+        std::dbg!(&res);
+        assert!(res.is_err());
     }
 }

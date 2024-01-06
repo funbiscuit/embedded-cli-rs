@@ -6,7 +6,6 @@ pub struct History<B: Buffer> {
     /// Elements are stored null separated, thus no null
     /// bytes are allowed in elements themselves
     /// Newer elements are placed to the right of previous element
-    /// Last element is not null terminated
     buffer: B,
 
     /// Index of first byte of currently selected element
@@ -34,12 +33,17 @@ impl<B: Buffer> History<B> {
                     .iter()
                     .position(|b| b == &0)
                     .map(|pos| cursor + pos + 1);
+                // null byte of last element was not included
+                // so if we found 0, it means there is at least
+                // one more element after current
                 if let Some(new_cursor) = new_cursor {
-                    let element_end = new_cursor
-                        + self.buffer.as_slice()[new_cursor..]
-                            .iter()
-                            .position(|b| b == &0)
-                            .expect("all elements are null terminated");
+                    // new_cursor is pointing to first byte of next element
+                    let new_len = self.buffer.as_slice()[new_cursor..]
+                        .iter()
+                        .position(|b| b == &0);
+
+                    // SAFETY: All elements are null terminated, including last element
+                    let element_end = unsafe { new_cursor + new_len.unwrap_unchecked() };
 
                     let element = unsafe {
                         core::str::from_utf8_unchecked(
@@ -103,7 +107,9 @@ impl<B: Buffer> History<B> {
 
         while let Some(existing) = self.next_older() {
             if existing == text {
-                let removing_start = self.cursor.unwrap();
+                // SAFETY: if next_older() returned Some, then
+                // cursor is also Some and points to returned element
+                let removing_start = unsafe { self.cursor.unwrap_unchecked() };
                 let removing_end = removing_start + text.len() + 1;
 
                 self.buffer
@@ -124,11 +130,14 @@ impl<B: Buffer> History<B> {
                 self.used = 0;
             } else {
                 // how many bytes we are removing, so whole command is removed
-                let removing = required
-                    + self.buffer.as_slice()[required - 1..self.used]
-                        .iter()
-                        .position(|b| b == &0)
-                        .expect("Last used byte is always 0");
+                // SAFETY: Last used byte is always 0
+                let removing = unsafe {
+                    required
+                        + self.buffer.as_slice()[required - 1..self.used]
+                            .iter()
+                            .position(|b| b == &0)
+                            .unwrap_unchecked()
+                };
 
                 if removing < self.used {
                     self.buffer
