@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = [
+  "embedded-cli",
+  "embedded-cli-macros",
+  "examples/*",
+]
+exclude = ["examples/arduino"]
+
+[workspace.package]
+license = "MIT OR Apache-2.0"
+edition = "2021"

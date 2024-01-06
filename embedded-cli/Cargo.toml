@@ -1,0 +1,21 @@
+[package]
+name = "embedded-cli"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+# default = []
+default = ["macros"]
+
+macros = ["embedded-cli-macros"]
+
+[dependencies]
+embedded-cli-macros = { path = "../embedded-cli-macros", optional = true }
+
+embedded-io = "0.6.1"
+
+bitflags = "2.4.1"
+ufmt = "0.2.0"
+
+[dev-dependencies]
+rstest = "0.18.2"

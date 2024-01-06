@@ -1,0 +1,11 @@
+[package]
+name = "desktop"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+embedded-cli = { path = "../../embedded-cli", features = ["macros"] }
+embedded-io = "0.6.1"
+rand = "0.8.5"
+termion = "2.0.3"
+ufmt = "0.2.0"

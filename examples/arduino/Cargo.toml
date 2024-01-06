@@ -1,0 +1,39 @@
+[package]
+name = "arduino-cli"
+version = "0.1.0"
+authors = ["funbiscuit <kokurinsv@gmail.com>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "arduino-cli"
+test = false
+bench = false
+
+[dependencies]
+embedded-cli = { path = "../../embedded-cli", features = ["macros"] }
+
+avr-progmem = "0.4.0"
+embedded-io = "0.6.1"
+panic-halt = "0.2.0"
+ufmt = "0.2.0"
+nb = "1.1.0"
+embedded-hal = "0.2.3"
+
+[dependencies.arduino-hal]
+git = "https://github.com/rahix/avr-hal"
+rev = "4c9c44c314eb061ee20556ef10d45dea36e75ee4"
+features = ["arduino-nano"]
+
+# Configure the build for minimal size - AVRs have very little program memory
+[profile.dev]
+panic = "abort"
+lto = true
+opt-level = "s"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+debug = true
+lto = true
+opt-level = "s"
