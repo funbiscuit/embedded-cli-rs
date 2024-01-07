@@ -153,6 +153,16 @@ fn on_unknown(
         F!("Received command: "),
         command.name()
     )?;
+    for (i, arg) in command.args().iter().enumerate() {
+        uwriteln!(
+            cli.writer(),
+            "{}{}{}{}'",
+            F!("Argument "),
+            i,
+            F!(": '"),
+            arg
+        )?;
+    }
     uwriteln!(
         cli.writer(),
         "{}{}",

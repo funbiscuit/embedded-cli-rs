@@ -131,6 +131,9 @@ fn on_unknown(
 ) -> Result<(), Infallible> {
     state.num_commands += 1;
     uwriteln!(cli.writer(), "Received command: {}", command.name())?;
+    for (i, arg) in command.args().iter().enumerate() {
+        uwriteln!(cli.writer(), "Argument {}: '{}'", i, arg)?;
+    }
     uwriteln!(cli.writer(), "Total received: {}", state.num_commands)?;
     Ok(())
 }
