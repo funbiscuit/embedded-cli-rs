@@ -2,6 +2,8 @@
 
 > **Command Line Interface for embedded systems**
 
+![Arduino Demo](examples/arduino/demo.gif)
+
 Dual-licensed under [Apache 2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT).
 
 This library is not stable yet, meaning it's API is likely to change.
