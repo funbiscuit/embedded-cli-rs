@@ -1,6 +1,15 @@
 [package]
 name = "embedded-cli-macros"
 version = "0.1.0"
+authors = ["Sviatoslav Kokurin <kokurinsv@gmail.com>"]
+description = """
+Macros for embedded-cli lib
+"""
+repository = "https://github.com/funbiscuit/embedded-cli-rs"
+readme = "../README.md"
+keywords = ["no_std", "cli", "macro", "embedded"]
+license = "MIT OR Apache-2.0"
+categories = ["command-line-interface", "embedded", "no-std"]
 edition = "2021"
 
 [lib]
