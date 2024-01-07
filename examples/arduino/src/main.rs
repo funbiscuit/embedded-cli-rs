@@ -176,8 +176,8 @@ fn on_unknown(
 fn main() -> ! {
     try_run();
 
-    // if run failed, just do nothing
-    loop {}
+    // if run failed, stop execution
+    panic!()
 }
 
 fn try_run() -> Option<()> {

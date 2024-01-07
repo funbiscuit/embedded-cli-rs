@@ -1,0 +1,60 @@
+name: Build
+on:
+  push:
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-lib:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install Rust
+        run: |
+          rustup override set stable
+          rustup update stable
+          rustup component add rustfmt clippy
+
+      - name: Check formatting
+        run: cargo fmt --check --all
+
+      - name: Run clippy
+        run: cargo clippy -- -Dwarnings
+
+      - name: Run tests
+        run: cargo test
+
+      - name: Build
+        run: cargo build
+
+  build-arduino:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install Rust
+        run: |
+          rustup override set nightly
+          rustup update nightly
+          rustup component add rustfmt clippy
+
+      - name: Install gcc avr
+        run: sudo apt-get install -y avr-libc gcc-avr
+
+      - name: Check formatting
+        working-directory: examples/arduino
+        run: cargo fmt --check --all
+
+      - name: Run clippy
+        working-directory: examples/arduino
+        run: cargo clippy -- -Dwarnings
+
+      - name: Build
+        working-directory: examples/arduino
+        run: cargo build

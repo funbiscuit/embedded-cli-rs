@@ -19,7 +19,7 @@ pub fn rotate_left(buf: &mut [u8], mid: usize) {
         loop {
             let mut k = j + d;
             if k >= n {
-                k = k - n;
+                k -= n;
             }
 
             if k == i {
@@ -45,7 +45,7 @@ pub fn trim_start(input: &str) -> &str {
 ///
 /// # Safety
 /// mid must be <= slice.len()
-pub unsafe fn split_at_mut<'a>(buf: &'a mut [u8], mid: usize) -> (&'a mut [u8], &'a mut [u8]) {
+pub unsafe fn split_at_mut(buf: &mut [u8], mid: usize) -> (&mut [u8], &mut [u8]) {
     // this exists only because slice::split_at_unchecked is not stable:
     // https://github.com/rust-lang/rust/issues/76014
     let len = buf.len();
@@ -64,9 +64,9 @@ pub unsafe fn split_at_mut<'a>(buf: &'a mut [u8], mid: usize) -> (&'a mut [u8], 
 fn gcd(mut a: usize, mut b: usize) -> usize {
     while a > 0 && b > 0 {
         if a > b {
-            a = a % b;
+            a %= b;
         } else {
-            b = b % a;
+            b %= a;
         }
     }
     if a == 0 {
