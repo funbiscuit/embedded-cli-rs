@@ -9,6 +9,9 @@ env:
 
 jobs:
   build-lib:
+    env:
+      RUSTFLAGS: "-C instrument-coverage"
+
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -18,7 +21,13 @@ jobs:
         run: |
           rustup override set stable
           rustup update stable
-          rustup component add rustfmt clippy
+          rustup component add rustfmt clippy llvm-tools
+
+      - name: Install grcov
+        uses: SierraSoftworks/setup-grcov@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          version: latest
 
       - name: Check formatting
         run: cargo fmt --check --all
@@ -31,6 +40,21 @@ jobs:
 
       - name: Build
         run: cargo build
+      
+      - name: Process coverage
+        run: >
+          grcov embedded-cli -s embedded-cli/src --binary-path target/debug -t cobertura
+          --branch --ignore-not-existing -o target/coverage.xml
+          --ignore "**/tests/**" --ignore "**/.cargo/registry/**"
+          --ignore "**/embedded-cli-macros/**" --ignore "**/examples/**"
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          files: target/coverage.xml
+          fail_ci_if_error: true
+          verbose: true
 
   build-arduino:
     runs-on: ubuntu-latest
