@@ -36,13 +36,3 @@ impl<'a> Buffer for &'a mut [u8] {
         self
     }
 }
-
-impl Buffer for () {
-    fn as_slice(&self) -> &[u8] {
-        &[]
-    }
-
-    fn as_slice_mut(&mut self) -> &mut [u8] {
-        &mut []
-    }
-}
