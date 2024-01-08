@@ -124,23 +124,26 @@ where
         processor: &mut P,
     ) -> Result<(), E> {
         if let Some(mut editor) = self.editor.take() {
-            if self.flags.contains(CliFlags::ESCAPE_MODE) {
-                self.on_escaped_input(&mut editor, b)?;
+            let result = if self.flags.contains(CliFlags::ESCAPE_MODE) {
+                self.on_escaped_input(&mut editor, b)
             } else if self.last_control == Some(ControlInput::Escape) && b == b'[' {
                 self.flags.set(CliFlags::ESCAPE_MODE, true);
+                Ok(())
             } else {
                 match Input::parse(b) {
                     Some(Input::ControlInput(input)) => {
-                        self.on_control_input::<C, _>(&mut editor, input, processor)?
+                        self.on_control_input::<C, _>(&mut editor, input, processor)
                     }
-                    Some(Input::Other(input)) => self.on_char_input(&mut editor, input)?,
-                    _ => {}
+                    Some(Input::Other(input)) => self.on_char_input(&mut editor, input),
+                    _ => Ok(()),
                 }
-            }
+            };
 
             self.editor = Some(editor);
+            result
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 
     pub fn write(
