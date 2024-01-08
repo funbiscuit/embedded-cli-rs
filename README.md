@@ -2,6 +2,9 @@
 
 > **Command Line Interface for embedded systems**
 
+[Demo](examples/arduino/README.md) of CLI running on Arduino Nano.
+Memory usage: 17KiB ROM, 500B static RAM. Most of static RAM is used by help strings.
+
 ![Arduino Demo](examples/arduino/demo.gif)
 
 Dual-licensed under [Apache 2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT).
