@@ -39,7 +39,7 @@ pub fn impl_processor(target: &TargetType) -> Result<TokenStream> {
                         cli: &mut _cli::cli::CliHandle<'_, W, E>,
                         raw: _cli::command::RawCommand<'a>,
                     ) -> Result<(), _cli::service::ProcessError<'a, E>> {
-                        let cmd = <#ident as _cli::service::FromRaw>::parse(raw)?;
+                        let cmd = <#ident #unnamed_lifetime as _cli::service::FromRaw>::parse(raw)?;
                         (self.f)(cli, cmd)?;
                         Ok(())
                     }

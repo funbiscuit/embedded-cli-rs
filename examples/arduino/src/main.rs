@@ -1,3 +1,4 @@
+#![warn(rust_2018_idioms)]
 #![no_std]
 #![no_main]
 
@@ -232,7 +233,7 @@ Use up and down for history navigation")
         // Command type is specified for autocompletion and help
         // Processor accepts closure where we can process parsed command
         // we can use different command and processor with each call
-        let _ = cli.process_byte::<Group, _>(
+        let _ = cli.process_byte::<Group<'_>, _>(
             byte,
             &mut Group::processor(|cli, command| {
                 match command {

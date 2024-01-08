@@ -1,4 +1,4 @@
-extern crate termion;
+#![warn(rust_2018_idioms)]
 
 use embedded_cli::cli::{CliBuilder, CliHandle};
 use embedded_cli::codes;
@@ -180,7 +180,7 @@ fn main() {
         // we can use different command and processor with each call
         // TODO: add example of login that uses different states
         for byte in bytes {
-            cli.process_byte::<Group, _>(
+            cli.process_byte::<Group<'_>, _>(
                 byte,
                 &mut Group::processor(|cli, command| {
                     match command {
