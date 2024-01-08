@@ -4,7 +4,7 @@ use crate::terminal::assert_terminal;
 
 #[test]
 fn write_external() {
-    let mut cli = CliWrapper::new();
+    let mut cli = CliWrapper::default();
 
     assert_terminal!(cli.terminal(), 2, vec!["$"]);
 
@@ -35,7 +35,7 @@ fn write_external() {
 
 #[test]
 fn write_from_service() {
-    let mut cli = CliWrapper::new();
+    let mut cli = CliWrapper::default();
 
     cli.set_handler(|cli, cmd| {
         cli.writer().write_str(r#"from command ""#)?;

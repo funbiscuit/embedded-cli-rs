@@ -1,10 +1,10 @@
-use crate::wrapper::{CliWrapper, OwnedCommand};
+use crate::wrapper::{CliWrapper, RawCommand};
 
 use crate::terminal::assert_terminal;
 
 #[test]
 fn simple_input() {
-    let mut cli = CliWrapper::new();
+    let mut cli = CliWrapper::default();
 
     assert_terminal!(cli.terminal(), 2, vec!["$"]);
 
@@ -22,16 +22,16 @@ fn simple_input() {
     assert_terminal!(cli.terminal(), 2, vec!["$ set led", "$"]);
     assert_eq!(
         cli.received_commands(),
-        vec![OwnedCommand {
+        vec![Ok(RawCommand {
             name: "set".to_string(),
             args: vec!["led".to_string()],
-        }]
+        })]
     );
 }
 
 #[test]
 fn delete_with_backspace() {
-    let mut cli = CliWrapper::new();
+    let mut cli = CliWrapper::default();
 
     cli.process_str("set");
 

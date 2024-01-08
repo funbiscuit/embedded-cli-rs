@@ -1,10 +1,10 @@
-use crate::wrapper::{CliWrapper, OwnedCommand};
+use crate::wrapper::{CliWrapper, RawCommand};
 
 use crate::terminal::assert_terminal;
 
 #[test]
 fn navigation() {
-    let mut cli = CliWrapper::new();
+    let mut cli = CliWrapper::default();
 
     cli.process_str("abc");
     cli.send_enter();
@@ -74,16 +74,16 @@ fn navigation() {
     );
     assert_eq!(
         cli.received_commands().last().unwrap(),
-        &OwnedCommand {
+        &Ok(RawCommand {
             name: "test1".to_string(),
             args: vec![],
-        }
+        })
     );
 }
 
 #[test]
 fn modify_when_in_history() {
-    let mut cli = CliWrapper::new();
+    let mut cli = CliWrapper::default();
 
     cli.process_str("abc");
     cli.send_enter();

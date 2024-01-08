@@ -2,21 +2,65 @@ use std::{cell::RefCell, convert::Infallible, fmt::Debug, rc::Rc};
 
 use embedded_cli::{
     cli::{Cli, CliBuilder, CliHandle},
-    command::RawCommand,
-    service::{CommandProcessor, ProcessError},
+    command::RawCommand as CliRawCommand,
+    service::{Autocomplete, CommandProcessor, Help, ParseError as CliParseError, ProcessError},
 };
 use embedded_io::ErrorType;
 
 use crate::terminal::Terminal;
 
+/// Helper trait to wrap parsed command or error with lifetime into owned command
+pub trait CommandConvert: Sized {
+    fn convert(cmd: CliRawCommand<'_>) -> Result<Self, ParseError>;
+}
+
+#[macro_export]
+macro_rules! impl_convert {
+    ($from_ty:ty => $to_ty:ty, $var_name:ident, $conversion:block) => {
+        impl embedded_cli::service::Autocomplete for $to_ty {
+            fn autocomplete(
+                request: embedded_cli::autocomplete::Request<'_>,
+                autocompletion: &mut embedded_cli::autocomplete::Autocompletion<'_>,
+            ) {
+                <$from_ty>::autocomplete(request, autocompletion)
+            }
+        }
+
+        impl embedded_cli::service::Help for $to_ty {
+            fn help<W: embedded_io::Write<Error = E>, E: embedded_io::Error>(
+                request: embedded_cli::help::HelpRequest<'_>,
+                writer: &mut embedded_cli::writer::Writer<'_, W, E>,
+            ) -> Result<(), embedded_cli::service::HelpError<E>> {
+                <$from_ty>::help(request, writer)
+            }
+        }
+
+        impl crate::wrapper::CommandConvert for $to_ty {
+            fn convert(
+                cmd: embedded_cli::command::RawCommand<'_>,
+            ) -> Result<Self, crate::wrapper::ParseError> {
+                let $var_name = <$from_ty as embedded_cli::service::FromRaw>::parse(cmd)?;
+                let cmd = $conversion;
+                Ok(cmd)
+            }
+        }
+    };
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct OwnedCommand {
+pub struct RawCommand {
     pub name: String,
     pub args: Vec<String>,
 }
 
-impl<'a> From<RawCommand<'a>> for OwnedCommand {
-    fn from(value: RawCommand<'a>) -> Self {
+impl_convert! {CliRawCommand<'_> => RawCommand, command, {
+    match command {
+        cmd => cmd.into(),
+    }
+}}
+
+impl<'a> From<CliRawCommand<'a>> for RawCommand {
+    fn from(value: CliRawCommand<'a>) -> Self {
         Self {
             name: value.name().to_string(),
             args: value.args().iter().map(str::to_string).collect(),
@@ -24,58 +68,89 @@ impl<'a> From<RawCommand<'a>> for OwnedCommand {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct State {
+#[derive(Debug)]
+pub struct State<T> {
     written: Vec<u8>,
-    commands: Vec<OwnedCommand>,
+    commands: Vec<Result<T, ParseError>>,
 }
 
-pub struct CliWrapper {
+impl<T> Default for State<T> {
+    fn default() -> Self {
+        Self {
+            written: Default::default(),
+            commands: Default::default(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ParseError {
+    NotEnoughArguments,
+    Other(String),
+    ParseArgumentError { value: String },
+    TooManyArguments { expected: usize },
+    UnknownCommand,
+}
+
+impl<'a> From<CliParseError<'a>> for ParseError {
+    fn from(value: CliParseError<'a>) -> Self {
+        match value {
+            CliParseError::NotEnoughArguments => ParseError::NotEnoughArguments,
+            CliParseError::Other(s) => ParseError::Other(s.to_string()),
+            CliParseError::ParseArgumentError { value } => ParseError::ParseArgumentError {
+                value: value.to_string(),
+            },
+            CliParseError::TooManyArguments { expected } => {
+                ParseError::TooManyArguments { expected }
+            }
+            CliParseError::UnknownCommand => ParseError::UnknownCommand,
+        }
+    }
+}
+
+pub struct CliWrapper<T: Autocomplete + Help + CommandConvert + Clone> {
     /// Actual cli object
-    cli: Cli<Writer, Infallible, &'static mut [u8], &'static mut [u8]>,
+    cli: Cli<Writer<T>, Infallible, &'static mut [u8], &'static mut [u8]>,
 
     handler: Option<
-        Box<
-            dyn FnMut(
-                &mut CliHandle<'_, Writer, Infallible>,
-                OwnedCommand,
-            ) -> Result<(), Infallible>,
-        >,
+        Box<dyn FnMut(&mut CliHandle<'_, Writer<T>, Infallible>, T) -> Result<(), Infallible>>,
     >,
 
-    state: Rc<RefCell<State>>,
+    state: Rc<RefCell<State<T>>>,
 
     terminal: Terminal,
 }
 
-struct App {
+struct App<T: CommandConvert + Clone> {
     handler: Option<
-        Box<
-            dyn FnMut(
-                &mut CliHandle<'_, Writer, Infallible>,
-                OwnedCommand,
-            ) -> Result<(), Infallible>,
-        >,
+        Box<dyn FnMut(&mut CliHandle<'_, Writer<T>, Infallible>, T) -> Result<(), Infallible>>,
     >,
-    state: Rc<RefCell<State>>,
+    state: Rc<RefCell<State<T>>>,
 }
 
-impl CommandProcessor<Writer, Infallible> for App {
+impl<T: CommandConvert + Clone> CommandProcessor<Writer<T>, Infallible> for App<T> {
     fn process<'a>(
         &mut self,
-        cli: &mut CliHandle<'_, Writer, Infallible>,
-        command: RawCommand<'a>,
+        cli: &mut CliHandle<'_, Writer<T>, Infallible>,
+        command: CliRawCommand<'a>,
     ) -> Result<(), ProcessError<'a, Infallible>> {
-        let command: OwnedCommand = command.into();
+        let command = T::convert(command);
+
         self.state.borrow_mut().commands.push(command.clone());
-        if let Some(ref mut handler) = self.handler {
+        if let (Some(handler), Ok(command)) = (&mut self.handler, command) {
             handler(cli, command)?;
         }
         Ok(())
     }
 }
 
-impl CliWrapper {
+impl Default for CliWrapper<RawCommand> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T: Autocomplete + Help + CommandConvert + Clone> CliWrapper<T> {
     pub fn new() -> Self {
         Self::new_with_sizes(80, 500)
     }
@@ -86,9 +161,7 @@ impl CliWrapper {
             state: self.state.clone(),
         };
         for b in text.as_bytes() {
-            self.cli
-                .process_byte::<RawCommand<'_>, _>(*b, &mut app)
-                .unwrap();
+            self.cli.process_byte::<T, _>(*b, &mut app).unwrap();
         }
 
         self.handler = app.handler.take();
@@ -113,13 +186,13 @@ impl CliWrapper {
 
     pub fn set_handler(
         &mut self,
-        handler: impl FnMut(&mut CliHandle<'_, Writer, Infallible>, OwnedCommand) -> Result<(), Infallible>
+        handler: impl FnMut(&mut CliHandle<'_, Writer<T>, Infallible>, T) -> Result<(), Infallible>
             + 'static,
     ) {
         self.handler = Some(Box::new(handler));
     }
 
-    pub fn received_commands(&self) -> Vec<OwnedCommand> {
+    pub fn received_commands(&self) -> Vec<Result<T, ParseError>> {
         self.state.borrow().commands.to_vec()
     }
 
@@ -132,7 +205,7 @@ impl CliWrapper {
         self.update_terminal();
     }
 
-    fn new_with_sizes(command_size: usize, history_size: usize) -> CliWrapper {
+    fn new_with_sizes(command_size: usize, history_size: usize) -> Self {
         let state = Rc::new(RefCell::new(State::default()));
 
         let writer = Writer {
@@ -148,7 +221,7 @@ impl CliWrapper {
             .unwrap();
 
         let terminal = Terminal::new();
-        let mut wrapper = CliWrapper {
+        let mut wrapper = Self {
             cli,
             handler: None,
             state,
@@ -165,15 +238,15 @@ impl CliWrapper {
     }
 }
 
-pub struct Writer {
-    state: Rc<RefCell<State>>,
+pub struct Writer<T> {
+    state: Rc<RefCell<State<T>>>,
 }
 
-impl ErrorType for Writer {
+impl<T> ErrorType for Writer<T> {
     type Error = Infallible;
 }
 
-impl embedded_io::Write for Writer {
+impl<T> embedded_io::Write for Writer<T> {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
         self.state.borrow_mut().written.extend_from_slice(buf);
         Ok(buf.len())
