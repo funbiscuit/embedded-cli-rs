@@ -2,6 +2,13 @@
 
 > **Command Line Interface for embedded systems**
 
+[![Crates.io](https://img.shields.io/crates/v/embedded-cli?style=flat-square)](https://crates.io/crates/embedded-cli)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](LICENSE-APACHE)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE-MIT)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/funbiscuit/embedded-cli-rs/ci.yml?branch=main&style=flat-square)](https://github.com/funbiscuit/embedded-cli-rs/actions/workflows/ci.yml?query=branch%3Amain)
+[![Coverage Status](https://img.shields.io/codecov/c/github/funbiscuit/embedded-cli-rs?style=flat-square)](https://app.codecov.io/github/funbiscuit/embedded-cli-rs)
+
+
 [Demo](examples/arduino/README.md) of CLI running on Arduino Nano.
 Memory usage: 17KiB ROM, 500B static RAM. Most of static RAM is used by help strings.
 
