@@ -15,6 +15,7 @@ pub mod command;
 mod editor;
 pub mod help;
 mod history;
+mod input;
 pub mod service;
 mod token;
 mod utf8;

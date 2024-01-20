@@ -10,23 +10,15 @@ use crate::{
     editor::Editor,
     help::HelpRequest,
     history::History,
+    input::{ControlInput, Input, InputGenerator},
     service::{Autocomplete, CommandProcessor, Help, HelpError, ProcessError},
     token::Tokens,
-    utf8::Utf8Accum,
     writer::{WriteExt, Writer},
 };
 
-use bitflags::bitflags;
 use embedded_io::{Error, Write};
 
 const PROMPT: &str = "$ ";
-
-bitflags! {
-    #[derive(Debug)]
-    struct CliFlags: u8 {
-        const ESCAPE_MODE = 1;
-    }
-}
 
 pub struct CliHandle<'a, W: Write<Error = E>, E: embedded_io::Error> {
     writer: Writer<'a, W, E>,
@@ -56,14 +48,17 @@ where
     }
 }
 
+enum NavigateHistory {
+    Older,
+    Newer,
+}
+
 #[doc(hidden)]
 pub struct Cli<W: Write<Error = E>, E: Error, CommandBuffer: Buffer, HistoryBuffer: Buffer> {
-    char_accum: Utf8Accum,
     editor: Option<Editor<CommandBuffer>>,
     history: History<HistoryBuffer>,
+    input_generator: Option<InputGenerator>,
     prompt: &'static str,
-    last_control: Option<ControlInput>,
-    flags: CliFlags,
     writer: W,
 }
 
@@ -76,11 +71,9 @@ where
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Cli")
-            .field("char_accum", &self.char_accum)
             .field("editor", &self.editor)
+            .field("input_generator", &self.input_generator)
             .field("prompt", &self.prompt)
-            .field("last_control", &self.last_control)
-            .field("flags", &self.flags)
             .finish()
     }
 }
@@ -100,12 +93,10 @@ where
         let history: History<HistoryBuffer> = History::new(history_buffer);
 
         let mut cli = Self {
-            char_accum: Utf8Accum::default(),
             editor: Some(Editor::new(command_buffer)),
             history,
+            input_generator: Some(InputGenerator::new()),
             prompt: PROMPT,
-            last_control: None,
-            flags: CliFlags::empty(),
             writer,
         };
 
@@ -123,23 +114,21 @@ where
         b: u8,
         processor: &mut P,
     ) -> Result<(), E> {
-        if let Some(mut editor) = self.editor.take() {
-            let result = if self.flags.contains(CliFlags::ESCAPE_MODE) {
-                self.on_escaped_input(&mut editor, b)
-            } else if self.last_control == Some(ControlInput::Escape) && b == b'[' {
-                self.flags.set(CliFlags::ESCAPE_MODE, true);
-                Ok(())
-            } else {
-                match Input::parse(b) {
-                    Some(Input::ControlInput(input)) => {
-                        self.on_control_input::<C, _>(&mut editor, input, processor)
+        if let (Some(mut editor), Some(mut input_generator)) =
+            (self.editor.take(), self.input_generator.take())
+        {
+            let result = input_generator
+                .accept(b)
+                .map(|input| match input {
+                    Input::Control(control) => {
+                        self.on_control_input::<C, _>(&mut editor, control, processor)
                     }
-                    Some(Input::Other(input)) => self.on_char_input(&mut editor, input),
-                    _ => Ok(()),
-                }
-            };
+                    Input::Char(text) => self.on_text_input(&mut editor, text),
+                })
+                .unwrap_or(Ok(()));
 
             self.editor = Some(editor);
+            self.input_generator = Some(input_generator);
             result
         } else {
             Ok(())
@@ -194,12 +183,10 @@ where
         self.writer.flush()
     }
 
-    fn on_char_input(&mut self, editor: &mut Editor<CommandBuffer>, input: u8) -> Result<(), E> {
-        if let Some(c) = self.char_accum.push_byte(input) {
-            if let Some(c) = editor.insert(c) {
-                //TODO: cursor position not at end
-                self.writer.flush_str(c)?;
-            }
+    fn on_text_input(&mut self, editor: &mut Editor<CommandBuffer>, text: &str) -> Result<(), E> {
+        if let Some(c) = editor.insert(text) {
+            //TODO: cursor position not at end
+            self.writer.flush_str(c)?;
         }
         Ok(())
     }
@@ -207,21 +194,11 @@ where
     fn on_control_input<C: Autocomplete + Help, P: CommandProcessor<W, E>>(
         &mut self,
         editor: &mut Editor<CommandBuffer>,
-        input: ControlInput,
+        control: ControlInput,
         processor: &mut P,
     ) -> Result<(), E> {
-        // handle \r\n and \n\r as single \n
-        if (self.last_control == Some(ControlInput::CarriageReturn)
-            && input == ControlInput::LineFeed)
-            || (self.last_control == Some(ControlInput::LineFeed)
-                && input == ControlInput::CarriageReturn)
-        {
-            self.last_control = None;
-            return Ok(());
-        }
-
-        match input {
-            ControlInput::CarriageReturn | ControlInput::LineFeed => {
+        match control {
+            ControlInput::Enter => {
                 self.writer.write_str(codes::CRLF)?;
 
                 let text = editor.text();
@@ -236,8 +213,7 @@ where
 
                 self.writer.flush_str(self.prompt)?;
             }
-            ControlInput::Escape => {}
-            ControlInput::Tabulation => {
+            ControlInput::Tab => {
                 self.process_autocomplete::<C>(editor)?;
             }
             ControlInput::Backspace => {
@@ -246,32 +222,29 @@ where
                     self.writer.flush_str("\x08 \x08")?;
                 }
             }
+            ControlInput::Down => self.navigate_history(editor, NavigateHistory::Newer)?,
+            ControlInput::Up => self.navigate_history(editor, NavigateHistory::Older)?,
         }
 
-        self.last_control = Some(input);
         Ok(())
     }
 
-    fn on_escaped_input(&mut self, editor: &mut Editor<CommandBuffer>, input: u8) -> Result<(), E> {
-        if (0x40..=0x7E).contains(&input) {
-            // handle escape sequence
-            self.flags.remove(CliFlags::ESCAPE_MODE);
+    fn navigate_history(
+        &mut self,
+        editor: &mut Editor<CommandBuffer>,
+        dir: NavigateHistory,
+    ) -> Result<(), E> {
+        let history_elem = match dir {
+            NavigateHistory::Older => self.history.next_older(),
+            NavigateHistory::Newer => self.history.next_newer().or(Some("")),
+        };
+        if let Some(element) = history_elem {
+            let input_len = editor.len();
+            editor.clear();
+            editor.insert(element);
+            self.clear_line(input_len, false)?;
 
-            // treat \e[..A as cursor up and \e[..B as cursor down
-            //TODO: there might be extra chars between \e[ and A/B, probably should not ignore them
-            let history_elem = match input {
-                b'A' => self.history.next_older(),
-                b'B' => self.history.next_newer().or(Some("")),
-                _ => None,
-            };
-            if let Some(element) = history_elem {
-                let input_len = editor.len();
-                editor.clear();
-                editor.insert(element);
-                self.clear_line(input_len, false)?;
-
-                self.writer.flush_str(editor.text())?;
-            }
+            self.writer.flush_str(editor.text())?;
         }
         Ok(())
     }
@@ -362,34 +335,5 @@ where
         self.writer.flush()?;
 
         Ok(())
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum ControlInput {
-    Backspace,
-    CarriageReturn,
-    Escape,
-    LineFeed,
-    Tabulation,
-}
-
-#[derive(Debug)]
-enum Input {
-    ControlInput(ControlInput),
-    Other(u8),
-}
-
-impl Input {
-    pub fn parse(byte: u8) -> Option<Input> {
-        let input = match byte {
-            codes::BACKSPACE => Input::ControlInput(ControlInput::Backspace),
-            codes::CARRIAGE_RETURN => Input::ControlInput(ControlInput::CarriageReturn),
-            codes::ESCAPE => Input::ControlInput(ControlInput::Escape),
-            codes::LINE_FEED => Input::ControlInput(ControlInput::LineFeed),
-            codes::TABULATION => Input::ControlInput(ControlInput::Tabulation),
-            b => Input::Other(b),
-        };
-        Some(input)
     }
 }
