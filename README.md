@@ -316,6 +316,7 @@ Terminal is required for correct experience. Following control sequences are sup
 * \b removes last typed character
 * \t tries to autocomplete current input
 * Esc[A (key up) and Esc[B (key down) navigates through history
+* Esc[C (key right) and Esc[D (key left) moves cursor inside current input
 
 If you run CLI through a serial port (like on Arduino with its UART-USB converter),
 you can use for example [PuTTY](https://putty.org) or [tio](https://github.com/tio/tio).
