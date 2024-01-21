@@ -46,12 +46,7 @@ impl<B: Buffer> Editor<B> {
         let mut text = unsafe { core::str::from_utf8_unchecked(text) };
         let mut removed_spaces = 0;
 
-        if let Some(pos) = text
-            .char_indices()
-            .skip(self.cursor)
-            .map(|(pos, _)| pos)
-            .next()
-        {
+        if let Some(pos) = utils::char_byte_index(text, self.cursor) {
             // cursor is inside text, so trim all whitespace, that is on the right to the cursor
             let right = &text.as_bytes()[pos..];
             let pos2 = right
@@ -106,14 +101,7 @@ impl<B: Buffer> Editor<B> {
             //TODO: try to grow buffer
             return None;
         }
-
-        let cursor = if let Some(cursor) = self
-            .text()
-            .char_indices()
-            .skip(self.cursor)
-            .map(|(pos, _)| pos)
-            .next()
-        {
+        let cursor = if let Some(cursor) = utils::char_byte_index(self.text(), self.cursor) {
             self.buffer
                 .as_slice_mut()
                 .copy_within(cursor..self.valid, cursor + text.len());
@@ -154,14 +142,14 @@ impl<B: Buffer> Editor<B> {
 
     /// Removes char at cursor position
     pub fn remove(&mut self) {
-        let mut it = self
-            .text()
-            .char_indices()
-            .skip(self.cursor)
-            .map(|(pos, _)| pos);
-
-        let cursor_pos = it.next();
-        let next_pos = it.next();
+        let cursor_pos = utils::char_byte_index(self.text(), self.cursor);
+        let next_pos = if let Some(cursor_pos) = cursor_pos {
+            // SAFETY: cursor_pos is at char boundary
+            let text = unsafe { self.text().get_unchecked(cursor_pos..) };
+            utils::char_byte_index(text, 1).map(|s| s + cursor_pos)
+        } else {
+            None
+        };
 
         match (cursor_pos, next_pos) {
             (Some(cursor), None) => {
@@ -216,13 +204,18 @@ impl<B: Buffer> Editor<B> {
         };
 
         let text = self.text();
-        let mut it = text.char_indices().map(|(i, _)| i).skip(start);
 
         let (start, end) = if let Some(num_chars) = num_chars {
-            // num chars always > 0
-            (it.next(), it.nth(num_chars - 1))
+            if let Some(pos) = utils::char_byte_index(text, start) {
+                // SAFETY: pos is at char boundary
+                let text = unsafe { text.get_unchecked(pos..) };
+                let b = utils::char_byte_index(text, num_chars).map(|s| s + pos);
+                (Some(pos), b)
+            } else {
+                (None, None)
+            }
         } else {
-            (it.next(), None)
+            (utils::char_byte_index(text, start), None)
         };
 
         match (start, end) {
