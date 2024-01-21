@@ -144,9 +144,7 @@ where
         &mut self,
         f: impl FnOnce(&mut Writer<'_, W, E>) -> Result<(), E>,
     ) -> Result<(), E> {
-        if let Some(input_len) = self.editor.as_ref().map(|e| e.len()) {
-            self.clear_line(input_len, true)?;
-        }
+        self.clear_line(true)?;
 
         let mut cli_writer = Writer::new(&mut self.writer);
 
@@ -164,27 +162,14 @@ where
         Ok(())
     }
 
-    fn clear_line(&mut self, input_len: usize, clear_prompt: bool) -> Result<(), E> {
+    fn clear_line(&mut self, clear_prompt: bool) -> Result<(), E> {
         self.writer.write_str("\r")?;
+        self.writer.write_bytes(codes::CLEAR_LINE)?;
 
-        if clear_prompt {
-            for _ in 0..self.prompt.len() {
-                self.writer.write_str(" ")?;
-            }
-        } else {
+        if !clear_prompt {
             self.writer.write_str(self.prompt)?;
         }
 
-        for _ in 0..input_len {
-            self.writer.write_str(" ")?;
-        }
-
-        if clear_prompt {
-            self.writer.write_str("\r")?;
-        } else {
-            self.writer.write_str("\r")?;
-            self.writer.write_str(self.prompt)?;
-        }
         self.writer.flush()
     }
 
@@ -269,10 +254,9 @@ where
             NavigateHistory::Newer => self.history.next_newer().or(Some("")),
         };
         if let Some(element) = history_elem {
-            let input_len = editor.len();
             editor.clear();
             editor.insert(element);
-            self.clear_line(input_len, false)?;
+            self.clear_line(false)?;
 
             self.writer.flush_str(editor.text())?;
         }

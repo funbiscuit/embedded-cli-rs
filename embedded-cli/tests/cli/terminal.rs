@@ -121,6 +121,11 @@ impl Terminal {
                                 .insert(current.char_indices().skip(cursor).next().unwrap().0, ' ');
                         }
                     }
+                    // clear whole line
+                    "\x1B[2K" => {
+                        // cursor position does not change
+                        current.clear();
+                    }
                     _ => unimplemented!(),
                 }
             }
@@ -262,5 +267,17 @@ mod tests {
 
         terminal.receive_bytes(codes::INSERT_CHAR);
         assert_terminal!(&terminal, 1, vec!["a  bdc"]);
+    }
+
+    #[test]
+    fn clear_line() {
+        let mut terminal = Terminal::new();
+
+        terminal.receive_bytes(b"abc");
+        terminal.receive_bytes(codes::CLEAR_LINE);
+        assert_terminal!(&terminal, 3, vec![""]);
+
+        terminal.receive_byte(b'd');
+        assert_terminal!(&terminal, 4, vec!["   d"]);
     }
 }
