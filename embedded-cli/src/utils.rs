@@ -5,32 +5,13 @@
 /// and there is no unsafe version
 pub fn rotate_left(buf: &mut [u8], mid: usize) {
     let n = buf.len();
-    if n == 0 || mid == 0 {
+    if n == 0 || mid == 0 || mid >= n {
         return;
     }
 
-    // To handle mid >= n
-    let d = mid % n;
-    for i in 0..gcd(d, n) {
-        // move i-th values of blocks
-        let temp = buf[i];
-        let mut j = i;
-
-        loop {
-            let mut k = j + d;
-            if k >= n {
-                k -= n;
-            }
-
-            if k == i {
-                break;
-            }
-
-            buf[j] = buf[k];
-            j = k;
-        }
-        buf[j] = temp;
-    }
+    reverse_array(buf, 0, mid - 1);
+    reverse_array(buf, mid, n - 1);
+    reverse_array(buf, 0, n - 1);
 }
 
 pub fn trim_start(input: &str) -> &str {
@@ -61,18 +42,11 @@ pub unsafe fn split_at_mut(buf: &mut [u8], mid: usize) -> (&mut [u8], &mut [u8])
     }
 }
 
-fn gcd(mut a: usize, mut b: usize) -> usize {
-    while a > 0 && b > 0 {
-        if a > b {
-            a %= b;
-        } else {
-            b %= a;
-        }
-    }
-    if a == 0 {
-        b
-    } else {
-        a
+fn reverse_array(buf: &mut [u8], mut start: usize, mut end: usize) {
+    while start < end {
+        buf.swap(start, end);
+        start += 1;
+        end -= 1;
     }
 }
 
@@ -92,15 +66,6 @@ mod tests {
     #[case::utf8("  abc dабвг佐  佗佟𑿁   𑿆𑿌  ", "abc dабвг佐  佗佟𑿁   𑿆𑿌  ")]
     fn trim_start(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(utils::trim_start(input), expected);
-    }
-
-    #[rstest]
-    #[case(2, 3, 1)]
-    #[case(20, 28, 4)]
-    #[case(60, 36, 12)]
-    #[case(98, 56, 14)]
-    fn gcd(#[case] a: usize, #[case] b: usize, #[case] result: usize) {
-        assert_eq!(utils::gcd(a, b), result);
     }
 
     #[rstest]
