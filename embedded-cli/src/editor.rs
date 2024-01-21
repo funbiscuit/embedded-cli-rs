@@ -95,7 +95,7 @@ impl<B: Buffer> Editor<B> {
 
     pub fn insert(&mut self, text: &str) -> Option<&str> {
         let remaining = self.buffer.len() - self.valid;
-        let chars = text.chars().count();
+        let chars = utils::char_count(text);
         let text = text.as_bytes();
         if remaining < text.len() {
             //TODO: try to grow buffer
@@ -118,8 +118,7 @@ impl<B: Buffer> Editor<B> {
     }
 
     pub fn len(&self) -> usize {
-        //TODO: use another usize to store len
-        self.text().chars().count()
+        utils::char_count(self.text())
     }
 
     pub fn move_left(&mut self) -> bool {
