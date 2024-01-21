@@ -48,7 +48,7 @@ impl<'a> Autocompletion<'a> {
     }
 
     /// Whether autocompletion is partial
-    /// and futher input is required
+    /// and further input is required
     pub fn is_partial(&self) -> bool {
         self.partial
     }
@@ -71,17 +71,12 @@ impl<'a> Autocompletion<'a> {
         // compare new autocompletion to existing and keep
         // only common prefix
         let len = match self.autocompleted() {
-            Some(current) => autocompletion
-                .char_indices()
-                .zip(current.char_indices())
-                .find(|((_, a1), (_, a2))| a1 != a2)
-                .map(|((pos, _), _)| pos)
-                .unwrap_or(current.len().min(autocompletion.len())),
+            Some(current) => utils::common_prefix_len(autocompletion, current),
             None => autocompletion.len(),
         };
 
         if len > self.buffer.len() {
-            // if buffer is full with this autocompletion, there is not much sence in doing it
+            // if buffer is full with this autocompletion, there is not much sense in doing it
             // since user will not be able to type anything else
             // so just do nothing with it
         } else {
@@ -100,7 +95,7 @@ mod tests {
     use crate::autocomplete::Autocompletion;
 
     #[test]
-    fn nomerge() {
+    fn no_merge() {
         let mut input = [0; 64];
 
         let autocompletion = Autocompletion::new(&mut input);

@@ -34,6 +34,27 @@ pub fn char_count(text: &str) -> usize {
     count
 }
 
+/// Returns length (in bytes) of longest common prefix
+pub fn common_prefix_len(left: &str, right: &str) -> usize {
+    let mut accum1 = Utf8Accum::default();
+
+    let mut pos = 0;
+    let mut byte_counter = 0;
+
+    for (&b1, &b2) in left.as_bytes().iter().zip(right.as_bytes().iter()) {
+        if b1 != b2 {
+            break;
+        }
+        let c1 = accum1.push_byte(b1);
+        byte_counter += 1;
+        if c1.is_some() {
+            pos = byte_counter;
+        }
+    }
+
+    pos
+}
+
 /// Function to rotate `buf` by `mid` elements
 ///
 /// Not using `core::slice::rotate_left` since it
@@ -129,5 +150,26 @@ mod tests {
     #[case("abcd абв 佐佗佟𑿁 𑿆𑿌")]
     fn char_count(#[case] text: &str) {
         assert_eq!(utils::char_count(text), text.chars().count())
+    }
+
+    #[rstest]
+    #[case("abcdef", "abcdef")]
+    #[case("abcdef", "abc")]
+    #[case("abcdef", "abc ghf")]
+    #[case("abcdef", "")]
+    #[case("", "")]
+    #[case("абв 佐佗佟𑿁", "абв 佐佗佟𑿁")]
+    #[case("абв 佐佗佟𑿁𑿆𑿌", "абв 佐佗佟𑿁")]
+    #[case("абв 佐佗佟𑿁 𑿆𑿌", "абв 佐佗𑿁佟")]
+    fn common_prefix(#[case] left: &str, #[case] right: &str) {
+        let expected = left
+            .char_indices()
+            .zip(right.char_indices())
+            .find(|((_, a1), (_, a2))| a1 != a2)
+            .map(|((pos, _), _)| pos)
+            .unwrap_or(right.len().min(left.len()));
+
+        assert_eq!(utils::common_prefix_len(left, right), expected);
+        assert_eq!(utils::common_prefix_len(right, left), expected);
     }
 }

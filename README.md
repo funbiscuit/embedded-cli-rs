@@ -10,7 +10,7 @@
 
 
 [Demo](examples/arduino/README.md) of CLI running on Arduino Nano.
-Memory usage: 15KiB of ROM and 0.5KiB of static RAM. Most of static RAM is used by help strings.
+Memory usage: 14KiB of ROM and 0.5KiB of static RAM. Most of static RAM is used by help strings.
 
 ![Arduino Demo](examples/arduino/demo.gif)
 
