@@ -2,7 +2,7 @@
 
 This example shows how to build cli with Arduino Nano.
 Another Arduino can also be used, but you will have to tweak configs.
-Example uses ~17KiB of ROM and ~0.5KiB of static RAM.
+Example uses ~15KiB of ROM and ~0.5KiB of static RAM.
 Most of RAM is taken by derived implementations for help and autocomplete
 that don't use progmem. In future this should be fixed.
 
@@ -23,7 +23,7 @@ tio /dev/ttyUSB0 --map ODELBS
 
 # Memory usage
 
-Memory usage might vary depending on compiler version and build environment.
+Memory usage might vary depending on compiler version, build environment and library version.
 To find out total ROM usage run:
 
 ```shell
@@ -33,13 +33,13 @@ cargo bloat --release
 Example output:
 ```
 File  .text    Size        Crate Name
-1.7%  52.5%  8.7KiB  arduino_cli arduino_cli::__avr_device_rt_main
-0.2%   7.5%  1.3KiB         core <core::iter::adapters::skip::Skip<I> as core::iter::traits::iterator::Iterator>::next
-0.2%   6.0%   1016B embedded_cli embedded_cli::autocomplete::Autocompletion::merge_autocompletion
-0.1%   4.3%    738B embedded_cli embedded_cli::token::Tokens::remove
-0.1%   3.2%    538B embedded_cli embedded_cli::token::Tokens::new
-0.8%  23.7%  3.9KiB              And 27 smaller methods. Use -n N to show more.
-3.2% 100.0% 16.6KiB              .text section size, the file size is 517.3KiB
+1.6%  54.5%  8.1KiB  arduino_cli arduino_cli::try_run
+0.2%   6.7%   1016B embedded_cli embedded_cli::autocomplete::Autocompletion::merge_autocompletion
+0.1%   3.6%    538B embedded_cli embedded_cli::token::Tokens::new
+0.1%   3.5%    530B embedded_cli embedded_cli::help::HelpRequest::from_tokens
+0.1%   3.1%    472B embedded_cli embedded_cli::token::Tokens::remove
+0.8%  25.4%  3.8KiB              And 34 smaller methods. Use -n N to show more.
+3.0% 100.0% 14.8KiB              .text section size, the file size is 498.4KiB
 ```
 
 To find total static memory usage:
@@ -54,7 +54,7 @@ cargo build --release && \
 
 Example output:
 ```
-RAM usage: 489
+RAM usage: 506
 ```
 
 To further analyze used space:

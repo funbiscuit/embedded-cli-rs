@@ -23,6 +23,17 @@ pub fn char_byte_index(text: &str, char_index: usize) -> Option<usize> {
     None
 }
 
+pub fn char_count(text: &str) -> usize {
+    let mut accum = Utf8Accum::default();
+    let mut count = 0;
+    for &b in text.as_bytes() {
+        if accum.push_byte(b).is_some() {
+            count += 1;
+        }
+    }
+    count
+}
+
 /// Function to rotate `buf` by `mid` elements
 ///
 /// Not using `core::slice::rotate_left` since it
@@ -111,5 +122,12 @@ mod tests {
 
             assert_eq!(utils::char_byte_index(text, pos), expected)
         }
+    }
+
+    #[rstest]
+    #[case("abcdef")]
+    #[case("abcd абв 佐佗佟𑿁 𑿆𑿌")]
+    fn char_count(#[case] text: &str) {
+        assert_eq!(utils::char_count(text), text.chars().count())
     }
 }
