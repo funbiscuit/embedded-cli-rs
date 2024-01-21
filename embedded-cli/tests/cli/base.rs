@@ -18,7 +18,7 @@ fn simple_input() {
 
     assert!(cli.received_commands().is_empty());
 
-    cli.process_str("\n");
+    cli.send_enter();
     assert_terminal!(cli.terminal(), 2, vec!["$ set led", "$"]);
     assert_eq!(
         cli.received_commands(),
@@ -37,11 +37,85 @@ fn delete_with_backspace() {
 
     assert_terminal!(cli.terminal(), 5, vec!["$ set"]);
 
-    cli.process_str("\x08\x08");
+    cli.send_backspace();
+
+    assert_terminal!(cli.terminal(), 4, vec!["$ se"]);
+
+    cli.send_backspace();
 
     assert_terminal!(cli.terminal(), 3, vec!["$ s"]);
 
-    cli.process_str("\x08\x08\x08");
+    cli.send_backspace();
+    cli.send_backspace();
+    cli.send_backspace();
 
     assert_terminal!(cli.terminal(), 2, vec!["$"]);
+}
+
+#[test]
+fn move_insert() {
+    let mut cli = CliWrapper::default();
+
+    cli.process_str("set");
+    assert_terminal!(cli.terminal(), 5, vec!["$ set"]);
+
+    cli.send_left();
+    assert_terminal!(cli.terminal(), 4, vec!["$ set"]);
+
+    cli.send_left();
+    assert_terminal!(cli.terminal(), 3, vec!["$ set"]);
+
+    cli.process_str("up-d");
+    assert_terminal!(cli.terminal(), 7, vec!["$ sup-det"]);
+
+    cli.send_backspace();
+    assert_terminal!(cli.terminal(), 6, vec!["$ sup-et"]);
+
+    cli.send_right();
+    assert_terminal!(cli.terminal(), 7, vec!["$ sup-et"]);
+
+    cli.process_str("d");
+    assert_terminal!(cli.terminal(), 8, vec!["$ sup-edt"]);
+
+    cli.send_enter();
+    assert_terminal!(cli.terminal(), 2, vec!["$ sup-edt", "$"]);
+    assert_eq!(
+        cli.received_commands(),
+        vec![Ok(RawCommand {
+            name: "sup-edt".to_string(),
+            args: vec![],
+        })]
+    );
+}
+
+#[test]
+fn try_move_outside() {
+    let mut cli = CliWrapper::default();
+
+    cli.process_str("set");
+    assert_terminal!(cli.terminal(), 5, vec!["$ set"]);
+
+    cli.send_right();
+    assert_terminal!(cli.terminal(), 5, vec!["$ set"]);
+
+    cli.send_left();
+    cli.send_left();
+    cli.send_left();
+    assert_terminal!(cli.terminal(), 2, vec!["$ set"]);
+
+    cli.send_left();
+    assert_terminal!(cli.terminal(), 2, vec!["$ set"]);
+
+    cli.process_str("d-");
+    assert_terminal!(cli.terminal(), 4, vec!["$ d-set"]);
+
+    cli.send_enter();
+    assert_terminal!(cli.terminal(), 2, vec!["$ d-set", "$"]);
+    assert_eq!(
+        cli.received_commands(),
+        vec![Ok(RawCommand {
+            name: "d-set".to_string(),
+            args: vec![],
+        })]
+    );
 }

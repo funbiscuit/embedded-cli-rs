@@ -7,6 +7,8 @@ pub enum ControlInput {
     Backspace,
     Down,
     Enter,
+    Back,
+    Forward,
     Tab,
     Up,
 }
@@ -64,6 +66,8 @@ impl InputGenerator {
             let control = match byte {
                 b'A' => ControlInput::Up,
                 b'B' => ControlInput::Down,
+                b'C' => ControlInput::Forward,
+                b'D' => ControlInput::Back,
                 _ => return None,
             };
             Some(control)
@@ -103,6 +107,8 @@ mod tests {
     #[case(b"\x1B[A", ControlInput::Up)]
     #[case(b"\x1B[B", ControlInput::Down)]
     #[case(b"\x1B[24B", ControlInput::Down)]
+    #[case(b"\x1B[C", ControlInput::Forward)]
+    #[case(b"\x1B[D", ControlInput::Back)]
     fn process_csi_control(#[case] bytes: &[u8], #[case] expected: ControlInput) {
         let mut accum = InputGenerator::new();
 

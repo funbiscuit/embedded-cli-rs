@@ -39,16 +39,30 @@ impl<B: Buffer> Editor<B> {
 
     /// Calls given function to create autocompletion of current input
     pub fn autocompletion(&mut self, f: impl FnOnce(Request<'_>, &mut Autocompletion<'_>)) {
-        if self.cursor < self.len() {
-            //autocompletion is possible only when cursor is at the end
-            return;
-        }
-
         // SAFETY: self.valid is always less than or equal to buffer len
         let (text, buf) = unsafe { utils::split_at_mut(self.buffer.as_slice_mut(), self.valid) };
 
         // SAFETY: buffer stores only valid utf-8 bytes 0..valid range
-        let text = unsafe { core::str::from_utf8_unchecked(text) };
+        let mut text = unsafe { core::str::from_utf8_unchecked(text) };
+        let mut removed_spaces = 0;
+
+        if let Some(pos) = text
+            .char_indices()
+            .skip(self.cursor)
+            .map(|(pos, _)| pos)
+            .next()
+        {
+            // cursor is inside text, so trim all whitespace, that is on the right to the cursor
+            let right = &text.as_bytes()[pos..];
+            let pos2 = right
+                .iter()
+                .rev()
+                .position(|&b| b != b' ')
+                .unwrap_or(right.len());
+            // SAFETY: pos2 is at the char boundary
+            text = unsafe { text.get_unchecked(..text.len() - pos2) };
+            removed_spaces = pos2;
+        }
 
         if let Some(request) = Request::from_input(text) {
             let mut autocompletion = Autocompletion::new(buf);
@@ -61,6 +75,13 @@ impl<B: Buffer> Editor<B> {
                 if !is_partial && buf.len() > bytes {
                     buf[bytes] = b' ';
                     bytes += 1;
+                }
+                if removed_spaces > 0 {
+                    // shift autocompleted text to the left
+                    self.buffer
+                        .as_slice_mut()
+                        .copy_within(self.valid.., self.valid - removed_spaces);
+                    self.valid -= removed_spaces;
                 }
                 self.valid += bytes;
                 self.cursor = self.len();
@@ -116,6 +137,15 @@ impl<B: Buffer> Editor<B> {
     pub fn move_left(&mut self) -> bool {
         if self.cursor > 0 {
             self.cursor -= 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn move_right(&mut self) -> bool {
+        if self.cursor < self.len() {
+            self.cursor += 1;
             true
         } else {
             false
@@ -253,6 +283,60 @@ mod tests {
         }
     }
 
+    #[rstest]
+    #[case("abc", 1, "Ж", "abЖc")]
+    #[case("abc", 2, "Ж", "aЖbc")]
+    #[case("abc", 3, "Ж ", "Ж abc")]
+    #[case("abc", 4, "Ж ", "Ж abc")]
+    #[case("adbc佐佗𑿌", 2, "Ж", "adbc佐Ж佗𑿌")]
+    fn move_left_insert(
+        #[case] initial: &str,
+        #[case] count: usize,
+        #[case] inserted: &str,
+        #[case] expected: &str,
+    ) {
+        let mut editor = Editor::new([0; 128]);
+
+        editor.insert(initial);
+
+        for _ in 0..count {
+            editor.move_left();
+        }
+
+        editor.insert(inserted);
+
+        assert_eq!(editor.text_range(..), expected);
+    }
+
+    #[rstest]
+    #[case("abc", 3, 1, "Ж", "aЖbc")]
+    #[case("абв", 3, 2, "Ж", "абЖв")]
+    #[case("абв", 1, 1, "Ж ", "абвЖ ")]
+    #[case("абв", 1, 2, "Ж ", "абвЖ ")]
+    #[case("adbc佐佗𑿌", 4, 2, "Ж", "adbc佐Ж佗𑿌")]
+    fn move_left_then_right_insert(
+        #[case] initial: &str,
+        #[case] count_left: usize,
+        #[case] count_right: usize,
+        #[case] inserted: &str,
+        #[case] expected: &str,
+    ) {
+        let mut editor = Editor::new([0; 128]);
+
+        editor.insert(initial);
+
+        for _ in 0..count_left {
+            editor.move_left();
+        }
+        for _ in 0..count_right {
+            editor.move_right();
+        }
+
+        editor.insert(inserted);
+
+        assert_eq!(editor.text_range(..), expected);
+    }
+
     #[test]
     fn remove() {
         let mut editor = Editor::new([0; 128]);
@@ -299,6 +383,27 @@ mod tests {
 
         editor.remove();
         assert_eq!(editor.text(), "");
+    }
+
+    #[rstest]
+    #[case(1, "adbc佐佗")]
+    #[case(2, "adbc佐𑿌")]
+    #[case(3, "adbc佗𑿌")]
+    #[case(4, "adb佐佗𑿌")]
+    #[case(5, "adc佐佗𑿌")]
+    #[case(6, "abc佐佗𑿌")]
+    #[case(7, "dbc佐佗𑿌")]
+    fn remove_inside(#[case] dist: usize, #[case] expected: &str) {
+        let mut editor = Editor::new([0; 128]);
+
+        editor.insert("adbc佐佗𑿌");
+
+        for _ in 0..dist {
+            editor.move_left();
+        }
+        editor.remove();
+
+        assert_eq!(editor.text(), expected);
     }
 
     #[rstest]

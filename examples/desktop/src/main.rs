@@ -166,6 +166,8 @@ fn main() {
             Event::Key(Key::Esc) => break,
             Event::Key(Key::Up) => vec![codes::ESCAPE, b'[', b'A'],
             Event::Key(Key::Down) => vec![codes::ESCAPE, b'[', b'B'],
+            Event::Key(Key::Right) => vec![codes::ESCAPE, b'[', b'C'],
+            Event::Key(Key::Left) => vec![codes::ESCAPE, b'[', b'D'],
             Event::Key(Key::BackTab) => vec![codes::TABULATION],
             Event::Key(Key::Backspace) => vec![codes::BACKSPACE],
             Event::Key(Key::Char(c)) => {

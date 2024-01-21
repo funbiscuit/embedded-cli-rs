@@ -119,12 +119,14 @@ pub(crate) trait WriteExt: ErrorType {
 
     fn flush_str(&mut self, text: &str) -> Result<(), Self::Error>;
 
+    fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), Self::Error>;
+
     fn write_str(&mut self, text: &str) -> Result<(), Self::Error>;
 }
 
 impl<W: Write> WriteExt for W {
     fn flush_bytes(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
-        self.write_all(bytes)?;
+        self.write_bytes(bytes)?;
         self.flush()
     }
 
@@ -132,8 +134,12 @@ impl<W: Write> WriteExt for W {
         self.flush_bytes(text.as_bytes())
     }
 
+    fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
+        self.write_all(bytes)
+    }
+
     fn write_str(&mut self, text: &str) -> Result<(), Self::Error> {
-        self.write_all(text.as_bytes())
+        self.write_bytes(text.as_bytes())
     }
 }
 
