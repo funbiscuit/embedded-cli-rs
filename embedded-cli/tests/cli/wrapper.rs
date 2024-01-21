@@ -180,6 +180,18 @@ impl<T: Autocomplete + Help + CommandConvert + Clone> CliWrapper<T> {
         self.process_str("\n")
     }
 
+    pub fn send_left(&mut self) {
+        self.process_str("\x1B[D")
+    }
+
+    pub fn send_right(&mut self) {
+        self.process_str("\x1B[C")
+    }
+
+    pub fn send_tab(&mut self) {
+        self.process_str("\t")
+    }
+
     pub fn send_up(&mut self) {
         self.process_str("\x1B[A")
     }

@@ -7,7 +7,7 @@
 #
 # To convert recorded mp4 it's best to use gifski:
 # ffmpeg -i embedded-cli.mp4 frame%04d.png
-# gifski -o demo.gif -Q 20 frame*.png
+# gifski -o demo.gif -Q 50 frame*.png
 
 type () {
    xdotool type --delay 300 -- "$1"
@@ -16,16 +16,27 @@ submit () {
    xdotool key --delay 500 Return
 }
 backspace () {
-   xdotool key --delay 500 BackSpace
+   local repeat=${1:-1}
+   xdotool key --delay 400 --repeat $repeat BackSpace
 }
 tab () {
    xdotool key --delay 500 Tab
 }
+left () {
+   local repeat=${1:-1}
+   xdotool key --delay 400 --repeat $repeat Left
+}
+right () {
+   local repeat=${1:-1}
+   xdotool key --delay 400 --repeat $repeat Right
+}
 up () {
-   xdotool key --delay 800 Up
+   local repeat=${1:-1}
+   xdotool key --delay 800 --repeat $repeat Up
 }
 down () {
-   xdotool key --delay 800 Down
+   local repeat=${1:-1}
+   xdotool key --delay 800 --repeat $repeat Down
 }
 
 echo "Demo started"
@@ -56,18 +67,26 @@ submit
 
 up
 
-type "--help"
+type "--hlp"
+left 2
+type "e"
 submit
 
 sleep 0.5
 
-up
-up
+up 2
 
 type "Rust"
 submit
 
-type "help get-led"
+type "got-l"
+left 5
+type "help "
+right 2
+backspace
+type "e"
+right 3
+type "ed"
 submit
 
 type "g"
@@ -79,8 +98,7 @@ tab
 type "12"
 submit
 
-up
-up
+up 2
 down
 backspace
 type "3"
@@ -91,10 +109,11 @@ submit
 
 up
 type " 123 789"
-backspace
-backspace
-backspace
+backspace 3
 type "456"
+left 4
+backspace 2
+type "01"
 submit
 
 # Wait until keys disappear

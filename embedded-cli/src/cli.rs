@@ -53,6 +53,11 @@ enum NavigateHistory {
     Newer,
 }
 
+enum NavigateInput {
+    Backward,
+    Forward,
+}
+
 #[doc(hidden)]
 pub struct Cli<W: Write<Error = E>, E: Error, CommandBuffer: Buffer, HistoryBuffer: Buffer> {
     editor: Option<Editor<CommandBuffer>>,
@@ -184,8 +189,13 @@ where
     }
 
     fn on_text_input(&mut self, editor: &mut Editor<CommandBuffer>, text: &str) -> Result<(), E> {
+        let is_inside = editor.cursor() < editor.len();
         if let Some(c) = editor.insert(text) {
-            //TODO: cursor position not at end
+            if is_inside {
+                // text is always one char
+                debug_assert_eq!(c.chars().count(), 1);
+                self.writer.write_bytes(codes::INSERT_CHAR)?;
+            }
             self.writer.flush_str(c)?;
         }
         Ok(())
@@ -219,13 +229,33 @@ where
             ControlInput::Backspace => {
                 if editor.move_left() {
                     editor.remove();
-                    self.writer.flush_str("\x08 \x08")?;
+                    self.writer.flush_bytes(codes::CURSOR_BACKWARD)?;
+                    self.writer.flush_bytes(codes::DELETE_CHAR)?;
                 }
             }
             ControlInput::Down => self.navigate_history(editor, NavigateHistory::Newer)?,
             ControlInput::Up => self.navigate_history(editor, NavigateHistory::Older)?,
+            ControlInput::Forward => self.navigate_input(editor, NavigateInput::Forward)?,
+            ControlInput::Back => self.navigate_input(editor, NavigateInput::Backward)?,
         }
 
+        Ok(())
+    }
+
+    fn navigate_input(
+        &mut self,
+        editor: &mut Editor<CommandBuffer>,
+        dir: NavigateInput,
+    ) -> Result<(), E> {
+        match dir {
+            NavigateInput::Backward if editor.move_left() => {
+                self.writer.flush_bytes(codes::CURSOR_BACKWARD)?;
+            }
+            NavigateInput::Forward if editor.move_right() => {
+                self.writer.flush_bytes(codes::CURSOR_FORWARD)?;
+            }
+            _ => return Ok(()),
+        }
         Ok(())
     }
 
@@ -265,8 +295,8 @@ where
                 _ => {}
             }
         });
-        let autocompleted = editor.text_range(initial_cursor..);
-        if !autocompleted.is_empty() {
+        if editor.cursor() > initial_cursor {
+            let autocompleted = editor.text_range(initial_cursor..);
             self.writer.flush_str(autocompleted)?;
         }
         Ok(())

@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](LICENSE-APACHE)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE-MIT)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/funbiscuit/embedded-cli-rs/ci.yml?branch=main&style=flat-square)](https://github.com/funbiscuit/embedded-cli-rs/actions/workflows/ci.yml?query=branch%3Amain)
-[![Coverage Status](https://img.shields.io/codecov/c/github/funbiscuit/embedded-cli-rs?style=flat-square)](https://app.codecov.io/github/funbiscuit/embedded-cli-rs)
+[![Coverage Status](https://img.shields.io/codecov/c/github/funbiscuit/embedded-cli-rs/main?style=flat-square)](https://app.codecov.io/github/funbiscuit/embedded-cli-rs)
 
 
 [Demo](examples/arduino/README.md) of CLI running on Arduino Nano.
@@ -27,6 +27,7 @@ for now. If you have suggestions - open an Issue or a Pull Request.
 - [x] No dynamic dispatch
 - [x] Configurable memory usage
 - [x] Declaration of commands with enums
+- [x] Left/right support (move inside current input)
 - [x] Parsing of arguments to common types
 - [x] Autocompletion of command names (with tab)
 - [x] History (navigate with up and down keypress)

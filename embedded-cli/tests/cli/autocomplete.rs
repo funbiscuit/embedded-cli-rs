@@ -85,3 +85,82 @@ fn complete_with_trailing_spaces() {
 
     assert_terminal!(cli.terminal(), 5, vec!["$ ex"]);
 }
+
+#[test]
+fn complete_when_inside() {
+    let mut cli = CliWrapper::<TestCommand>::new();
+
+    cli.process_str("ex");
+    cli.send_left();
+    assert_terminal!(cli.terminal(), 3, vec!["$ ex"]);
+
+    cli.send_tab();
+    assert_terminal!(cli.terminal(), 7, vec!["$ exit"]);
+
+    cli.send_enter();
+    assert_eq!(cli.received_commands(), vec![Ok(TestCommand::Exit)]);
+}
+
+#[test]
+fn complete_when_inside_with_trailing_spaces() {
+    let mut cli = CliWrapper::<TestCommand>::new();
+
+    cli.process_str("ex ");
+    cli.send_left();
+    cli.send_left();
+    assert_terminal!(cli.terminal(), 3, vec!["$ ex"]);
+
+    cli.send_tab();
+    assert_terminal!(cli.terminal(), 7, vec!["$ exit"]);
+
+    cli.send_enter();
+    assert_eq!(cli.received_commands(), vec![Ok(TestCommand::Exit)]);
+}
+
+#[test]
+fn complete_when_inside_after_complete() {
+    let mut cli = CliWrapper::<TestCommand>::new();
+
+    cli.process_str("e");
+    cli.send_tab();
+    assert_terminal!(cli.terminal(), 7, vec!["$ exit"]);
+
+    cli.send_left();
+    cli.send_left();
+    cli.send_left();
+    assert_terminal!(cli.terminal(), 4, vec!["$ exit"]);
+
+    cli.send_tab();
+    assert_terminal!(cli.terminal(), 7, vec!["$ exit"]);
+
+    cli.send_enter();
+    assert_eq!(cli.received_commands(), vec![Ok(TestCommand::Exit)]);
+}
+
+#[test]
+fn complete_when_inside_without_variants() {
+    let mut cli = CliWrapper::<TestCommand>::new();
+
+    cli.process_str("do");
+    cli.send_left();
+    assert_terminal!(cli.terminal(), 3, vec!["$ do"]);
+
+    cli.send_tab();
+    assert_terminal!(cli.terminal(), 3, vec!["$ do"]);
+}
+
+#[test]
+fn complete_when_inside_and_empty_completion() {
+    let mut cli = CliWrapper::<TestCommand>::new();
+
+    cli.process_str("g");
+    cli.send_tab();
+    assert_terminal!(cli.terminal(), 6, vec!["$ get-"]);
+
+    cli.send_left();
+    cli.send_left();
+    assert_terminal!(cli.terminal(), 4, vec!["$ get-"]);
+
+    cli.send_tab();
+    assert_terminal!(cli.terminal(), 6, vec!["$ get-"]);
+}
