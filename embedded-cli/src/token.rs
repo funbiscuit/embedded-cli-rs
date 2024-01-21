@@ -114,14 +114,16 @@ impl<'a> Tokens<'a> {
             // SAFETY: bytes are kept valid utf8 during modification
             let bytes = unsafe { core::str::from_utf8_unchecked_mut(bytes) };
             let new_len = bytes.len() - len - 1;
-            let (left, right) = bytes.split_at_mut(new_len);
+            // SAFETY: new_len is at char boundary (start of removed item)
+            let (left, right) = unsafe { utils::split_str_at_mut(bytes, new_len) };
             self.tokens = left;
             // SAFETY: right is len + 1 length long (last byte is 0)
             unsafe { Some(right.get_unchecked_mut(..len)) }
         } else {
             let bytes = core::mem::take(&mut self.tokens);
             if cursor > 0 {
-                let (left, right) = bytes.split_at_mut(cursor);
+                // cursor is at char boundary (start of removed item)
+                let (left, right) = unsafe { utils::split_str_at_mut(bytes, cursor) };
                 // SAFETY: left is cursor len, last byte is 0
                 self.tokens = unsafe { left.get_unchecked_mut(..cursor - 1) };
                 Some(right)

@@ -99,6 +99,22 @@ pub unsafe fn split_at_mut(buf: &mut [u8], mid: usize) -> (&mut [u8], &mut [u8])
     }
 }
 
+/// Splits given mutable string slice into two parts
+///
+/// # Safety
+/// mid must be <= slice.len() and at char boundary
+pub unsafe fn split_str_at_mut(buf: &mut str, mid: usize) -> (&mut str, &mut str) {
+    let (left, right) = split_at_mut(buf.as_bytes_mut(), mid);
+
+    // SAFETY: Caller has to check that `mid` is at char boundary
+    unsafe {
+        (
+            core::str::from_utf8_unchecked_mut(left),
+            core::str::from_utf8_unchecked_mut(right),
+        )
+    }
+}
+
 fn reverse_array(buf: &mut [u8], mut start: usize, mut end: usize) {
     while start < end {
         buf.swap(start, end);
