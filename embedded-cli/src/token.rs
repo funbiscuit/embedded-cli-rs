@@ -10,60 +10,63 @@ impl<'a> Tokens<'a> {
     pub fn new(input: &'a mut str) -> Option<Self> {
         // SAFETY: bytes are modified correctly, so they remain utf8
         let bytes = unsafe { input.as_bytes_mut() };
-        // 0 is reserved for delimiter
-        if bytes.contains(&0) {
-            return None;
-        }
 
         let mut insert = 0;
         let mut empty = true;
 
-        if let Some(mut token_start) = bytes.iter().position(|&b| b != b' ') {
-            loop {
-                if insert > 0 {
-                    bytes[insert] = 0;
-                    insert += 1;
-                }
-                let token_end = if bytes[token_start] == b'"' {
-                    let mut cursor = token_start + 1;
-                    let mut escaped = false;
+        enum Mode {
+            Space,
+            Normal,
+            Quoted,
+            Unescape,
+        }
 
-                    // manually move all bytes since we might need to unescape some of them
-                    loop {
-                        if cursor >= bytes.len() {
-                            break bytes.len();
-                        }
-                        if escaped {
-                            bytes[insert] = bytes[cursor];
-                            insert += 1;
-                            escaped = false;
-                        } else if bytes[cursor] == b'"' {
-                            break cursor + 1;
-                        } else if bytes[cursor] == b'\\' {
-                            escaped = true;
-                        } else {
-                            bytes[insert] = bytes[cursor];
+        let mut mode = Mode::Space;
+
+        for cursor_pos in 0..bytes.len() {
+            let byte = bytes[cursor_pos];
+            match mode {
+                Mode::Space => {
+                    if byte == b'"' {
+                        mode = Mode::Quoted;
+                        empty = false;
+                        if insert > 0 {
+                            bytes[insert] = 0;
                             insert += 1;
                         }
-                        cursor += 1;
+                    } else if byte != b' ' && byte != 0 {
+                        mode = Mode::Normal;
+                        empty = false;
+                        if insert > 0 {
+                            bytes[insert] = 0;
+                            insert += 1;
+                        }
+                        bytes[insert] = byte;
+                        insert += 1;
                     }
-                } else {
-                    // find next space and move everything in bulk
-                    let token_end = token_start
-                        + bytes[token_start..]
-                            .iter()
-                            .position(|&b| b == b' ')
-                            .unwrap_or(bytes.len() - token_start);
-                    bytes.copy_within(token_start..token_end, insert);
-                    insert += token_end - token_start;
-                    token_end
-                };
-                empty = false;
-                if let Some(start) = bytes[token_end..].iter().position(|&b| b != b' ') {
-                    token_start = token_end + start;
-                } else {
-                    // everything else is whitespace
-                    break;
+                }
+                Mode::Normal => {
+                    if byte == b' ' || byte == 0 {
+                        mode = Mode::Space;
+                    } else {
+                        bytes[insert] = byte;
+                        insert += 1;
+                    }
+                }
+                Mode::Quoted => {
+                    if byte == b'"' || byte == 0 {
+                        mode = Mode::Space;
+                    } else if byte == b'\\' {
+                        mode = Mode::Unescape;
+                    } else {
+                        bytes[insert] = byte;
+                        insert += 1;
+                    }
+                }
+                Mode::Unescape => {
+                    bytes[insert] = byte;
+                    insert += 1;
+                    mode = Mode::Quoted;
                 }
             }
         }
