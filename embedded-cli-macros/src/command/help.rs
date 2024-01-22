@@ -2,11 +2,12 @@ use darling::Result;
 use proc_macro2::TokenStream;
 use quote::quote;
 
-use super::{
-    model::{Command, CommandArgs},
-    TargetType,
-};
+use super::{model::Command, TargetType};
 
+#[cfg(feature = "help")]
+use super::model::CommandArgs;
+
+#[cfg(feature = "help")]
 pub fn derive_help(
     target: &TargetType,
     help_title: &str,
@@ -48,6 +49,24 @@ pub fn derive_help(
     Ok(output)
 }
 
+#[allow(unused_variables)]
+#[cfg(not(feature = "help"))]
+pub fn derive_help(
+    target: &TargetType,
+    help_title: &str,
+    commands: &[Command],
+) -> Result<TokenStream> {
+    let ident = target.ident();
+    let named_lifetime = target.named_lifetime();
+
+    let output = quote! {
+        impl #named_lifetime _cli::service::Help for #ident #named_lifetime { }
+    };
+
+    Ok(output)
+}
+
+#[cfg(feature = "help")]
 fn create_help_all(commands: &[Command], title: &str) -> Result<TokenStream> {
     let max_len = commands.iter().map(|c| c.name().len()).max().unwrap_or(0);
     let elements: Vec<_> = commands
@@ -70,6 +89,7 @@ fn create_help_all(commands: &[Command], title: &str) -> Result<TokenStream> {
     })
 }
 
+#[cfg(feature = "help")]
 fn create_command_help(command: &Command) -> Result<TokenStream> {
     let name = command.name();
 

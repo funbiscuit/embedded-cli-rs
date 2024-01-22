@@ -17,6 +17,8 @@ proc-macro = true
 
 [features]
 default = []
+autocomplete = []
+help = []
 
 [dependencies]
 convert_case = "0.6.0"

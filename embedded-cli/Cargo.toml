@@ -13,9 +13,12 @@ categories = ["command-line-interface", "embedded", "no-std"]
 edition = "2021"
 
 [features]
-default = ["macros"]
+default = ["macros", "autocomplete", "help", "history"]
 
 macros = ["embedded-cli-macros"]
+autocomplete = ["embedded-cli-macros/autocomplete"]
+help = ["embedded-cli-macros/help"]
+history = []
 
 [dependencies]
 embedded-cli-macros = { version = "0.1.0", path = "../embedded-cli-macros", optional = true }

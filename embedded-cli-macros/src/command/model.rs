@@ -4,11 +4,12 @@ use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 use syn::{Field, Fields, Variant};
 
-use super::{
-    args::{ArgType, TypedArg},
-    doc::Help,
-};
+use super::args::{ArgType, TypedArg};
 
+#[cfg(feature = "help")]
+use super::doc::Help;
+
+#[allow(dead_code)]
 #[derive(Debug, FromVariant, Default)]
 #[darling(default, attributes(command), forward_attrs(allow, doc, cfg))]
 struct CommandAttrs {
@@ -24,6 +25,7 @@ pub enum CommandArgs {
 pub struct CommandArg {
     field_name: String,
     field_type: TokenStream,
+    #[cfg(feature = "help")]
     help: Help,
     ty: ArgType,
 }
@@ -41,20 +43,21 @@ impl CommandArg {
         let field_type = aa.inner();
         let field_type = quote! { #field_type };
 
-        let help = Help::parse(&field.attrs)?;
-
         Ok(Self {
             field_name,
             field_type,
-            help,
+            #[cfg(feature = "help")]
+            help: Help::parse(&field.attrs)?,
             ty,
         })
     }
 
+    #[cfg(feature = "help")]
     pub fn help(&self) -> &Help {
         &self.help
     }
 
+    #[cfg(feature = "help")]
     pub fn is_optional(&self) -> bool {
         self.ty == ArgType::Option
     }
@@ -75,6 +78,7 @@ impl CommandArg {
 pub struct Command {
     name: String,
     args: CommandArgs,
+    #[cfg(feature = "help")]
     help: Help,
     ident: Ident,
 }
@@ -83,8 +87,6 @@ impl Command {
     pub fn parse(variant: &Variant) -> Result<Self> {
         let variant_ident = &variant.ident;
         let attrs = CommandAttrs::from_variant(variant)?;
-
-        let help = Help::parse(&attrs.attrs)?;
 
         let name = attrs.name.unwrap_or_else(|| {
             variant_ident
@@ -117,7 +119,8 @@ impl Command {
         Ok(Self {
             name,
             args,
-            help,
+            #[cfg(feature = "help")]
+            help: Help::parse(&attrs.attrs)?,
             ident: variant_ident.clone(),
         })
     }
@@ -126,6 +129,7 @@ impl Command {
         &self.args
     }
 
+    #[cfg(feature = "help")]
     pub fn help(&self) -> &Help {
         &self.help
     }

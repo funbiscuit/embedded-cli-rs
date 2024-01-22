@@ -9,6 +9,7 @@ use self::model::Command;
 
 mod args;
 mod autocomplete;
+#[cfg(feature = "help")]
 mod doc;
 mod help;
 mod model;

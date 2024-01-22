@@ -8,7 +8,6 @@
 [![Build Status](https://img.shields.io/github/actions/workflow/status/funbiscuit/embedded-cli-rs/ci.yml?branch=main&style=flat-square)](https://github.com/funbiscuit/embedded-cli-rs/actions/workflows/ci.yml?query=branch%3Amain)
 [![Coverage Status](https://img.shields.io/codecov/c/github/funbiscuit/embedded-cli-rs/main?style=flat-square)](https://app.codecov.io/github/funbiscuit/embedded-cli-rs)
 
-
 [Demo](examples/arduino/README.md) of CLI running on Arduino Nano.
 Memory usage: 14KiB of ROM and 0.5KiB of static RAM. Most of static RAM is used by help strings.
 
@@ -284,6 +283,7 @@ Commands:
 ```
 
 Get help for specific command with `help <COMMAND>`:
+
 ```
 $ help hello
 Say hello to World or someone else
@@ -310,8 +310,10 @@ Options:
 ```
 
 ## User Guide
+
 You'll need to begin communication (usually through a UART) with a device running a CLI.
 Terminal is required for correct experience. Following control sequences are supported:
+
 * \r or \n sends a command (\r\n is also supported)
 * \b removes last typed character
 * \t tries to autocomplete current input
@@ -320,3 +322,24 @@ Terminal is required for correct experience. Following control sequences are sup
 
 If you run CLI through a serial port (like on Arduino with its UART-USB converter),
 you can use for example [PuTTY](https://putty.org) or [tio](https://github.com/tio/tio).
+
+## Memory usage
+
+Memory usage depends on version of crate, enabled features and complexity of your commands.
+Below is memory usage of arduino [example](examples/arduino/README.md) when different features are enabled.
+Memory usage might change in future versions, but I'll try to keep this table up to date.
+
+| Features                  | ROM, bytes | Static RAM, bytes |
+|---------------------------|:----------:|:-----------------:|
+| -                         |    7494    |        141        |
+| autocomplete              |    9066    |        161        |
+| history                   |    9168    |        173        |
+| help                      |   10446    |        458        |
+| autocomplete+history      |   10772    |        193        |
+| autocomplete+help         |   12052    |        474        |
+| help+history              |   12154    |        490        |
+| autocomplete+help+history |   13968    |        506        |
+
+Commands used to calculate memory usage are given in example [description](examples/arduino/README.md#memory-usage).
+As table shows, enabling help adds quite a lot to memory usage since help usually requires a lot of text to be stored.
+Also enabling all features almost doubles ROM usage comparing to all features disabled.

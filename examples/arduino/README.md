@@ -48,7 +48,7 @@ To find total static memory usage:
 cargo build --release && \
   avr-nm -Crtd --size-sort \
     target/avr-atmega328p/release/arduino-cli.elf \
-  | grep -i ' [dbv] ' \
+  | grep -i ' [dbvr] ' \
   |  awk -F " " '{Total=Total+$1} END{print "RAM usage: " Total}' -
 ```
 

@@ -14,6 +14,7 @@ pub mod codes;
 pub mod command;
 mod editor;
 pub mod help;
+#[cfg(feature = "history")]
 mod history;
 mod input;
 pub mod service;

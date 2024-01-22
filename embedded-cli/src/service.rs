@@ -1,12 +1,12 @@
 use embedded_io::Write;
 
-use crate::{
-    autocomplete::{Autocompletion, Request},
-    cli::CliHandle,
-    command::RawCommand,
-    help::HelpRequest,
-    writer::Writer,
-};
+use crate::{cli::CliHandle, command::RawCommand};
+
+#[cfg(feature = "autocomplete")]
+use crate::autocomplete::{Autocompletion, Request};
+
+#[cfg(feature = "help")]
+use crate::{help::HelpRequest, writer::Writer};
 
 #[derive(Debug)]
 pub enum ProcessError<'a, E: embedded_io::Error> {
@@ -48,6 +48,8 @@ impl<E: embedded_io::Error> From<E> for HelpError<E> {
 }
 
 pub trait Autocomplete {
+    // trait is kept available so it's possible to use same where clause
+    #[cfg(feature = "autocomplete")]
     /// Try to process autocompletion request
     /// Autocompleted bytes (not present in request) should be written to
     /// given autocompletion.
@@ -60,6 +62,8 @@ pub trait Help {
         0
     }
 
+    // trait is kept available so it's possible to use same where clause
+    #[cfg(feature = "help")]
     /// Try to process help request
     /// Use given writer to print help text
     /// If help request cannot be processed by this service,

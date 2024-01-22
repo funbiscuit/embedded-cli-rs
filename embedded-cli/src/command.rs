@@ -4,11 +4,16 @@ use embedded_io::Write;
 
 use crate::{
     arguments::ArgList,
-    autocomplete::{Autocompletion, Request},
     cli::CliHandle,
-    service::{Autocomplete, CommandProcessor, FromRaw, Help, HelpError, ParseError, ProcessError},
+    service::{Autocomplete, CommandProcessor, FromRaw, Help, ParseError, ProcessError},
     token::Tokens,
 };
+
+#[cfg(feature = "autocomplete")]
+use crate::autocomplete::{Autocompletion, Request};
+
+#[cfg(feature = "help")]
+use crate::service::HelpError;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RawCommand<'a> {
@@ -82,12 +87,14 @@ impl<'a> RawCommand<'a> {
 }
 
 impl<'a> Autocomplete for RawCommand<'a> {
+    #[cfg(feature = "autocomplete")]
     fn autocomplete(_: Request<'_>, _: &mut Autocompletion<'_>) {
         // noop
     }
 }
 
 impl<'a> Help for RawCommand<'a> {
+    #[cfg(feature = "help")]
     fn help<W: embedded_io::Write<Error = E>, E: embedded_io::Error>(
         _: crate::help::HelpRequest<'_>,
         _: &mut crate::writer::Writer<'_, W, E>,

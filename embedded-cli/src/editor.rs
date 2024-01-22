@@ -1,12 +1,11 @@
-use crate::{
-    autocomplete::{Autocompletion, Request},
-    buffer::Buffer,
-    utils,
-};
+use crate::{buffer::Buffer, utils};
 use core::{
     fmt::Debug,
     ops::{Bound, RangeBounds},
 };
+
+#[cfg(feature = "autocomplete")]
+use crate::autocomplete::{Autocompletion, Request};
 
 pub struct Editor<B: Buffer> {
     buffer: B,
@@ -37,6 +36,7 @@ impl<B: Buffer> Editor<B> {
         }
     }
 
+    #[cfg(feature = "autocomplete")]
     /// Calls given function to create autocompletion of current input
     pub fn autocompletion(&mut self, f: impl FnOnce(Request<'_>, &mut Autocompletion<'_>)) {
         // SAFETY: self.valid is always less than or equal to buffer len
@@ -176,6 +176,7 @@ impl<B: Buffer> Editor<B> {
     }
 
     /// Returns text in subrange of this editor. start is including, end is exclusive
+    #[allow(dead_code)]
     pub fn text_range(&self, range: impl RangeBounds<usize>) -> &str {
         let (start, num_chars) = match (range.start_bound(), range.end_bound()) {
             (Bound::Included(start), Bound::Included(end)) => {
