@@ -116,6 +116,15 @@ backspace 2
 type "01"
 submit
 
+type "test \"101 456\""
+submit
+
+up
+left 4
+backspace 4
+type "\\\"abc\\\" "
+submit
+
 # Wait until keys disappear
 sleep 5
 echo "Demo is finished"
