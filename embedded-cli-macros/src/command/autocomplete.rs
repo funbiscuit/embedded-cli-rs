@@ -4,6 +4,7 @@ use quote::quote;
 
 use super::{model::Command, TargetType};
 
+#[cfg(feature = "autocomplete")]
 pub fn derive_autocomplete(target: &TargetType, commands: &[Command]) -> Result<TokenStream> {
     let command_count = commands.len();
     let command_names: Vec<String> = commands.iter().map(|c| c.name().to_string()).collect();
@@ -31,6 +32,19 @@ pub fn derive_autocomplete(target: &TargetType, commands: &[Command]) -> Result<
                 }
             }
         }
+    };
+
+    Ok(output)
+}
+
+#[allow(unused_variables)]
+#[cfg(not(feature = "autocomplete"))]
+pub fn derive_autocomplete(target: &TargetType, commands: &[Command]) -> Result<TokenStream> {
+    let ident = target.ident();
+    let named_lifetime = target.named_lifetime();
+
+    let output = quote! {
+        impl #named_lifetime _cli::service::Autocomplete for #ident #named_lifetime { }
     };
 
     Ok(output)

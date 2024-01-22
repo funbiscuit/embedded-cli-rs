@@ -1,7 +1,10 @@
 use darling::{Error, Result};
 use proc_macro2::TokenStream;
-use quote::{format_ident, quote};
+use quote::quote;
 use syn::{Data, DeriveInput};
+
+#[cfg(feature = "help")]
+use quote::format_ident;
 
 use crate::{processor, utils::TargetType};
 
@@ -48,6 +51,7 @@ pub fn derive_command_group(input: DeriveInput) -> Result<TokenStream> {
     Ok(output)
 }
 
+#[cfg(feature = "autocomplete")]
 fn derive_autocomplete(target: &TargetType, groups: &[CommandGroup]) -> TokenStream {
     let ident = target.ident();
     let named_lifetime = target.named_lifetime();
@@ -74,6 +78,18 @@ fn derive_autocomplete(target: &TargetType, groups: &[CommandGroup]) -> TokenStr
     }
 }
 
+#[allow(unused_variables)]
+#[cfg(not(feature = "autocomplete"))]
+fn derive_autocomplete(target: &TargetType, groups: &[CommandGroup]) -> TokenStream {
+    let ident = target.ident();
+    let named_lifetime = target.named_lifetime();
+
+    quote! {
+        impl #named_lifetime _cli::service::Autocomplete for #ident #named_lifetime { }
+    }
+}
+
+#[cfg(feature = "help")]
 fn derive_help(target: &TargetType, groups: &[CommandGroup]) -> TokenStream {
     let ident = target.ident();
     let named_lifetime = target.named_lifetime();
@@ -113,6 +129,17 @@ fn derive_help(target: &TargetType, groups: &[CommandGroup]) -> TokenStream {
                 res0 #(#or_res)*
             }
         }
+    }
+}
+
+#[allow(unused_variables)]
+#[cfg(not(feature = "help"))]
+fn derive_help(target: &TargetType, groups: &[CommandGroup]) -> TokenStream {
+    let ident = target.ident();
+    let named_lifetime = target.named_lifetime();
+
+    quote! {
+        impl #named_lifetime _cli::service::Help for #ident #named_lifetime { }
     }
 }
 

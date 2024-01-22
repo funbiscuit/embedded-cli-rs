@@ -2,19 +2,28 @@ pub use crate::builder::CliBuilder;
 
 use core::fmt::Debug;
 
+#[cfg(not(feature = "history"))]
+use core::marker::PhantomData;
+
 use crate::{
-    autocomplete::Request,
     buffer::Buffer,
     codes,
     command::RawCommand,
     editor::Editor,
-    help::HelpRequest,
-    history::History,
     input::{ControlInput, Input, InputGenerator},
-    service::{Autocomplete, CommandProcessor, Help, HelpError, ProcessError},
+    service::{Autocomplete, CommandProcessor, Help, ProcessError},
     token::Tokens,
     writer::{WriteExt, Writer},
 };
+
+#[cfg(feature = "autocomplete")]
+use crate::autocomplete::Request;
+
+#[cfg(feature = "help")]
+use crate::{help::HelpRequest, service::HelpError};
+
+#[cfg(feature = "history")]
+use crate::history::History;
 
 use embedded_io::{Error, Write};
 
@@ -48,6 +57,7 @@ where
     }
 }
 
+#[cfg(feature = "history")]
 enum NavigateHistory {
     Older,
     Newer,
@@ -61,10 +71,13 @@ enum NavigateInput {
 #[doc(hidden)]
 pub struct Cli<W: Write<Error = E>, E: Error, CommandBuffer: Buffer, HistoryBuffer: Buffer> {
     editor: Option<Editor<CommandBuffer>>,
+    #[cfg(feature = "history")]
     history: History<HistoryBuffer>,
     input_generator: Option<InputGenerator>,
     prompt: &'static str,
     writer: W,
+    #[cfg(not(feature = "history"))]
+    _ph: PhantomData<HistoryBuffer>,
 }
 
 impl<W, E, CommandBuffer, HistoryBuffer> Debug for Cli<W, E, CommandBuffer, HistoryBuffer>
@@ -90,19 +103,21 @@ where
     CommandBuffer: Buffer,
     HistoryBuffer: Buffer,
 {
+    #[allow(unused_variables)]
     pub fn new(
         writer: W,
         command_buffer: CommandBuffer,
         history_buffer: HistoryBuffer,
     ) -> Result<Self, E> {
-        let history: History<HistoryBuffer> = History::new(history_buffer);
-
         let mut cli = Self {
             editor: Some(Editor::new(command_buffer)),
-            history,
+            #[cfg(feature = "history")]
+            history: History::new(history_buffer),
             input_generator: Some(InputGenerator::new()),
             prompt: PROMPT,
             writer,
+            #[cfg(not(feature = "history"))]
+            _ph: PhantomData,
         };
 
         cli.writer.flush_str(cli.prompt)?;
@@ -196,8 +211,8 @@ where
             ControlInput::Enter => {
                 self.writer.write_str(codes::CRLF)?;
 
-                let text = editor.text();
-                self.history.push(text);
+                #[cfg(feature = "history")]
+                self.history.push(editor.text());
                 let text = editor.text_mut();
 
                 if let Some(tokens) = Tokens::new(text) {
@@ -209,6 +224,7 @@ where
                 self.writer.flush_str(self.prompt)?;
             }
             ControlInput::Tab => {
+                #[cfg(feature = "autocomplete")]
                 self.process_autocomplete::<C>(editor)?;
             }
             ControlInput::Backspace => {
@@ -218,8 +234,16 @@ where
                     self.writer.flush_bytes(codes::DELETE_CHAR)?;
                 }
             }
-            ControlInput::Down => self.navigate_history(editor, NavigateHistory::Newer)?,
-            ControlInput::Up => self.navigate_history(editor, NavigateHistory::Older)?,
+            ControlInput::Down =>
+            {
+                #[cfg(feature = "history")]
+                self.navigate_history(editor, NavigateHistory::Newer)?
+            }
+            ControlInput::Up =>
+            {
+                #[cfg(feature = "history")]
+                self.navigate_history(editor, NavigateHistory::Older)?
+            }
             ControlInput::Forward => self.navigate_input(editor, NavigateInput::Forward)?,
             ControlInput::Back => self.navigate_input(editor, NavigateInput::Backward)?,
         }
@@ -244,6 +268,7 @@ where
         Ok(())
     }
 
+    #[cfg(feature = "history")]
     fn navigate_history(
         &mut self,
         editor: &mut Editor<CommandBuffer>,
@@ -263,6 +288,7 @@ where
         Ok(())
     }
 
+    #[cfg(feature = "autocomplete")]
     fn process_autocomplete<C: Autocomplete>(
         &mut self,
         editor: &mut Editor<CommandBuffer>,
@@ -308,11 +334,13 @@ where
         Ok(())
     }
 
-    fn process_input<C: Autocomplete + Help, P: CommandProcessor<W, E>>(
+    #[allow(clippy::extra_unused_type_parameters)]
+    fn process_input<C: Help, P: CommandProcessor<W, E>>(
         &mut self,
         tokens: Tokens<'_>,
         handler: &mut P,
     ) -> Result<(), E> {
+        #[cfg(feature = "help")]
         match HelpRequest::from_tokens(tokens) {
             Ok(request) => {
                 self.process_help::<C>(request)?;
@@ -323,6 +351,10 @@ where
                 };
             }
         }
+        #[cfg(not(feature = "help"))]
+        if let Some(command) = RawCommand::from_tokens(tokens) {
+            self.process_command(command, handler)?;
+        };
 
         Ok(())
     }
@@ -333,6 +365,7 @@ where
             .flush_str("Error occured during command processing\r\n")
     }
 
+    #[cfg(feature = "help")]
     fn process_help<C: Help>(&mut self, request: HelpRequest<'_>) -> Result<(), E> {
         let mut writer = Writer::new(&mut self.writer);
         let err = C::help(request.clone(), &mut writer);

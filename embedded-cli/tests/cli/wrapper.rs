@@ -18,6 +18,7 @@ pub trait CommandConvert: Sized {
 macro_rules! impl_convert {
     ($from_ty:ty => $to_ty:ty, $var_name:ident, $conversion:block) => {
         impl embedded_cli::service::Autocomplete for $to_ty {
+            #[cfg(feature = "autocomplete")]
             fn autocomplete(
                 request: embedded_cli::autocomplete::Request<'_>,
                 autocompletion: &mut embedded_cli::autocomplete::Autocompletion<'_>,
@@ -27,6 +28,7 @@ macro_rules! impl_convert {
         }
 
         impl embedded_cli::service::Help for $to_ty {
+            #[cfg(feature = "help")]
             fn help<W: embedded_io::Write<Error = E>, E: embedded_io::Error>(
                 request: embedded_cli::help::HelpRequest<'_>,
                 writer: &mut embedded_cli::writer::Writer<'_, W, E>,
