@@ -1,5 +1,6 @@
 #!/bin/bash
 # This script emulates predefined input to showcase usage of CLI
+# Size of screen: 65x15
 # Dependencies: xdotool
 # To run demo you need to flash arduino example to real arduino nano
 # Then run script in background:
