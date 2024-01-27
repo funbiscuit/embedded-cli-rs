@@ -329,17 +329,17 @@ Memory usage depends on version of crate, enabled features and complexity of you
 Below is memory usage of arduino [example](examples/arduino/README.md) when different features are enabled.
 Memory usage might change in future versions, but I'll try to keep this table up to date.
 
-| Features                  | ROM, bytes | Static RAM, bytes |
-|---------------------------|:----------:|:-----------------:|
-| -                         |    7494    |        141        |
-| autocomplete              |    9066    |        161        |
-| history                   |    9168    |        173        |
-| help                      |   10446    |        458        |
-| autocomplete+history      |   10772    |        193        |
-| autocomplete+help         |   12052    |        474        |
-| help+history              |   12154    |        490        |
-| autocomplete+help+history |   13968    |        506        |
+| Features                        | ROM, bytes | Static RAM, bytes |
+|---------------------------------|:----------:|:-----------------:|
+|                                 |    9388    |        161        |
+| `autocomplete`                  |   11126    |        181        |
+| `history`                       |   11248    |        193        |
+| `autocomplete` `history`        |   12748    |        213        |
+| `help`                          |   12204    |        557        |
+| `autocomplete` `help`           |   13916    |        573        |
+| `history` `help`                |   14456    |        589        |
+| `autocomplete` `history` `help` |   15538    |        605        |
 
-Commands used to calculate memory usage are given in example [description](examples/arduino/README.md#memory-usage).
+This table is generated using this [script](examples/arduino/memory.sh).
 As table shows, enabling help adds quite a lot to memory usage since help usually requires a lot of text to be stored.
 Also enabling all features almost doubles ROM usage comparing to all features disabled.

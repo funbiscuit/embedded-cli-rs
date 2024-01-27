@@ -93,6 +93,7 @@ pub enum CommandArgType {
 }
 
 impl CommandArgType {
+    #[cfg(feature = "help")]
     pub fn is_positional(&self) -> bool {
         self == &CommandArgType::Positional
     }
