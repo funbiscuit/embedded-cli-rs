@@ -7,7 +7,7 @@ mod group;
 mod processor;
 mod utils;
 
-#[proc_macro_derive(Command, attributes(command))]
+#[proc_macro_derive(Command, attributes(command, arg))]
 pub fn derive_command(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
 

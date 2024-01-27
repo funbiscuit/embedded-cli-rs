@@ -1,5 +1,6 @@
 #![warn(rust_2018_idioms)]
 
+use embedded_cli::arguments::Arg;
 use embedded_cli::cli::{CliBuilder, CliHandle};
 use embedded_cli::codes;
 use embedded_cli::command::RawCommand;
@@ -19,6 +20,10 @@ enum Base<'a> {
     Hello {
         /// To whom to say hello (World by default)
         name: Option<&'a str>,
+
+        /// Print extra info
+        #[arg(short = 'V', long)]
+        verbose: bool,
     },
 
     /// Stop CLI and exit
@@ -33,6 +38,7 @@ enum GetCommand {
     /// Get current LED value
     GetLed {
         /// ID of requested LED
+        #[arg(long)]
         led: u8,
     },
 
@@ -41,7 +47,12 @@ enum GetCommand {
     #[command(name = "getAdc")]
     GetAdc {
         /// ID of requested ADC
+        #[arg(long)]
         adc: u8,
+
+        /// Sample count (16 by default)
+        #[arg(long)]
+        samples: Option<u8>,
     },
 }
 
@@ -93,12 +104,14 @@ fn on_get(
                 rand::random::<u8>()
             )?;
         }
-        GetCommand::GetAdc { adc } => {
+        GetCommand::GetAdc { adc, samples } => {
+            let samples = samples.unwrap_or(16);
             uwrite!(
                 cli.writer(),
-                "Current ADC{} readings: {}",
+                "Current ADC{} readings: {}. Used {} samples",
                 adc,
-                rand::random::<u8>()
+                rand::random::<u8>(),
+                samples
             )?;
         }
     }
@@ -113,7 +126,15 @@ fn on_command(
     state.num_commands += 1;
 
     match command {
-        Base::Hello { name } => {
+        Base::Hello { name, verbose } => {
+            if verbose {
+                cli.writer().writeln_str("Checking name")?;
+                if name.is_none() {
+                    cli.writer().writeln_str("Name not found")?;
+                } else {
+                    cli.writer().writeln_str("Name given")?;
+                }
+            }
             uwrite!(cli.writer(), "Hello, {}", name.unwrap_or("World"))?;
         }
         Base::Exit => {
@@ -130,10 +151,18 @@ fn on_unknown(
     command: RawCommand<'_>,
 ) -> Result<(), Infallible> {
     state.num_commands += 1;
-    uwriteln!(cli.writer(), "Received command: {}", command.name())?;
-    for (i, arg) in command.args().iter().enumerate() {
-        uwriteln!(cli.writer(), "Argument {}: '{}'", i, arg)?;
+    cli.writer().writeln_str("Received:")?;
+    uwriteln!(cli.writer(), "Command: {}", command.name())?;
+
+    for arg in command.args().args().flatten() {
+        match arg {
+            Arg::DoubleDash => cli.writer().writeln_str("--")?,
+            Arg::LongOption(name) => uwriteln!(cli.writer(), "Long option: {}", name)?,
+            Arg::ShortOption(name) => uwriteln!(cli.writer(), "Short option: {}", name)?,
+            Arg::Value(value) => uwriteln!(cli.writer(), "Value: {}", value)?,
+        }
     }
+
     uwriteln!(cli.writer(), "Total received: {}", state.num_commands)?;
     Ok(())
 }

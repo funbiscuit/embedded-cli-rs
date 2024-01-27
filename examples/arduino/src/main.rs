@@ -11,6 +11,7 @@ use arduino_hal::port::Pin;
 use arduino_hal::prelude::_void_ResultVoidExt;
 use arduino_hal::usart::UsartWriter;
 use avr_progmem::progmem_str as F;
+use embedded_cli::arguments::Arg;
 use embedded_cli::cli::CliBuilder;
 use embedded_cli::cli::CliHandle;
 use embedded_cli::command::RawCommand;
@@ -28,6 +29,10 @@ enum Base<'a> {
     Hello {
         /// To whom to say hello (World by default)
         name: Option<&'a str>,
+
+        /// Print extra info
+        #[arg(short = 'V', long)]
+        verbose: bool,
     },
 
     /// Stop CLI and exit
@@ -42,6 +47,7 @@ enum GetCommand {
     /// Get current LED value
     GetLed {
         /// ID of requested LED
+        #[arg(long)]
         led: u8,
     },
 
@@ -50,7 +56,12 @@ enum GetCommand {
     #[command(name = "getAdc")]
     GetAdc {
         /// ID of requested ADC
+        #[arg(long)]
         adc: u8,
+
+        /// Sample count (16 by default)
+        #[arg(long)]
+        samples: Option<u8>,
     },
 }
 
@@ -105,14 +116,18 @@ fn on_get(
                 12
             )?;
         }
-        GetCommand::GetAdc { adc } => {
+        GetCommand::GetAdc { adc, samples } => {
+            let samples = samples.unwrap_or(16);
             uwrite!(
                 cli.writer(),
-                "{}{}{}{}",
+                "{}{}{}{}{}{}{}",
                 F!("Current ADC"),
                 adc,
                 F!(" readings: "),
-                23
+                23,
+                F!(" Used "),
+                samples,
+                F!(" samples"),
             )?;
         }
     }
@@ -127,7 +142,15 @@ fn on_command(
     state.num_commands += 1;
 
     match command {
-        Base::Hello { name } => {
+        Base::Hello { name, verbose } => {
+            if verbose {
+                cli.writer().writeln_str(F!("Checking name"))?;
+                if name.is_none() {
+                    cli.writer().writeln_str(F!("Name not found"))?;
+                } else {
+                    cli.writer().writeln_str(F!("Name given"))?;
+                }
+            }
             // last write in command callback may or may not
             // end with newline. so both uwrite!() and uwriteln!()
             // will give identical results
@@ -148,22 +171,26 @@ fn on_unknown(
 ) -> Result<(), Infallible> {
     state.num_commands += 1;
     // Use writeln to write separate lines
-    uwriteln!(
-        cli.writer(),
-        "{}{}",
-        F!("Received command: "),
-        command.name()
-    )?;
-    for (i, arg) in command.args().iter().enumerate() {
-        uwriteln!(
-            cli.writer(),
-            "{}{}{}{}'",
-            F!("Argument "),
-            i,
-            F!(": '"),
-            arg
-        )?;
+    cli.writer().writeln_str(F!("Received:"))?;
+    uwriteln!(cli.writer(), "{}{}", F!("Command: "), command.name())?;
+
+    for arg in command.args().args().flatten() {
+        match arg {
+            Arg::DoubleDash => cli.writer().writeln_str("--")?,
+            Arg::LongOption(name) => {
+                cli.writer().write_str(F!("Long option: "))?;
+                cli.writer().writeln_str(name)?;
+            }
+            Arg::ShortOption(name) => {
+                uwriteln!(cli.writer(), "{}{}", F!("Short option: "), name)?;
+            }
+            Arg::Value(value) => {
+                cli.writer().write_str(F!("Value: "))?;
+                cli.writer().writeln_str(value)?;
+            }
+        }
     }
+
     uwriteln!(
         cli.writer(),
         "{}{}",

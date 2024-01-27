@@ -26,6 +26,7 @@ for now. If you have suggestions - open an Issue or a Pull Request.
 - [x] No dynamic dispatch
 - [x] Configurable memory usage
 - [x] Declaration of commands with enums
+- [x] Options and flags support
 - [x] Left/right support (move inside current input)
 - [x] Parsing of arguments to common types
 - [x] Autocompletion of command names (with tab)
@@ -34,7 +35,6 @@ for now. If you have suggestions - open an Issue or a Pull Request.
 - [x] Formatted write with [ufmt](https://github.com/japaric/ufmt)
 - [x] No panicking branches in generated code, when optimized
 - [x] Any byte-stream interface is supported (`embedded_io::Write` as output stream, input bytes are given one-by-one)
-- [ ] Move inside current input with left/right keypress
 - [ ] Colors through ANSI escape sequences
 - [ ] Navigation through history with search of current input
 - [ ] Support wrapping of generated str slices in user macro (useful for arduino progmem)

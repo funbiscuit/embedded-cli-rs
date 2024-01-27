@@ -20,6 +20,8 @@ pub enum ParseError<'a> {
     Other(&'a str),
     ParseArgumentError { value: &'a str },
     TooManyArguments { expected: usize },
+    UnknownFlag { flag: char },
+    UnknownOption { name: &'a str },
     UnknownCommand,
 }
 
