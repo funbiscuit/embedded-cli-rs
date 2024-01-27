@@ -91,6 +91,8 @@ pub enum ParseError {
     Other(String),
     ParseArgumentError { value: String },
     TooManyArguments { expected: usize },
+    UnknownOption { name: String },
+    UnknownFlag { flag: char },
     UnknownCommand,
 }
 
@@ -105,6 +107,10 @@ impl<'a> From<CliParseError<'a>> for ParseError {
             CliParseError::TooManyArguments { expected } => {
                 ParseError::TooManyArguments { expected }
             }
+            CliParseError::UnknownOption { name } => ParseError::UnknownOption {
+                name: name.to_string(),
+            },
+            CliParseError::UnknownFlag { flag } => ParseError::UnknownFlag { flag },
             CliParseError::UnknownCommand => ParseError::UnknownCommand,
         }
     }

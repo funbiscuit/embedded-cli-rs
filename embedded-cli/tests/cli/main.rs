@@ -9,6 +9,7 @@ mod base;
 mod history;
 #[cfg(not(feature = "history"))]
 mod history_disabled;
+mod options;
 mod terminal;
 mod wrapper;
 mod writer;

@@ -1,3 +1,4 @@
+use convert_case::{Case, Casing};
 use darling::Result;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
@@ -6,14 +7,14 @@ use crate::command::model::CommandArgs;
 
 use super::{
     args::ArgType,
-    model::{Command, CommandArg},
+    model::{Command, CommandArg, CommandArgType},
     TargetType,
 };
 
 pub fn derive_from_raw(target: &TargetType, commands: &[Command]) -> Result<TokenStream> {
     let ident = target.ident();
 
-    let command_parsing = create_command_parsing(ident, commands)?;
+    let parsing = create_parsing(ident, commands)?;
 
     let named_lifetime = target.named_lifetime();
 
@@ -21,7 +22,7 @@ pub fn derive_from_raw(target: &TargetType, commands: &[Command]) -> Result<Toke
 
         impl<'a> _cli::service::FromRaw<'a> for #ident #named_lifetime {
             fn parse(command: _cli::command::RawCommand<'a>) -> Result<Self, _cli::service::ParseError<'a>> {
-                #command_parsing
+                #parsing
                 Ok(command)
             }
         }
@@ -30,8 +31,8 @@ pub fn derive_from_raw(target: &TargetType, commands: &[Command]) -> Result<Toke
     Ok(output)
 }
 
-fn create_command_parsing(ident: &Ident, commands: &[Command]) -> Result<TokenStream> {
-    let match_arms: Vec<_> = commands.iter().map(|c| match_arm(ident, c)).collect();
+fn create_parsing(ident: &Ident, commands: &[Command]) -> Result<TokenStream> {
+    let match_arms: Vec<_> = commands.iter().map(|c| command_parsing(ident, c)).collect();
 
     Ok(quote! {
         let command = match command.name() {
@@ -41,7 +42,7 @@ fn create_command_parsing(ident: &Ident, commands: &[Command]) -> Result<TokenSt
     })
 }
 
-fn match_arm(ident: &Ident, command: &Command) -> TokenStream {
+fn command_parsing(ident: &Ident, command: &Command) -> TokenStream {
     let name = command.name();
     let variant_name = command.ident();
     let variant_fqn = quote! { #ident::#variant_name };
@@ -65,50 +66,175 @@ fn match_arm(ident: &Ident, command: &Command) -> TokenStream {
 fn create_arg_parsing(args: &[CommandArg]) -> (TokenStream, Vec<TokenStream>) {
     let mut variables = vec![];
     let mut arguments = vec![];
-    let mut match_arms = vec![];
+    let mut positional_value_arms = vec![];
+    let mut extra_states = vec![];
+    let mut option_name_arms = vec![];
+    let mut option_value_arms = vec![];
 
-    for (i, arg) in args.iter().enumerate() {
+    let mut arg_pos = 0usize;
+    for arg in args.iter() {
         let fi = format_ident!("{}", arg.name());
-        let arg_decl = quote! { #fi: };
         let ty = arg.field_type();
 
-        let var_decl = quote! {
-            let mut #fi = None;
-        };
+        let arg_default;
 
-        let match_arm = quote! {
-            #i => {
-                let v = <#ty as _cli::arguments::FromArgument>::from_arg(arg)
-                    .map_err(|_| _cli::service::ParseError::ParseArgumentError { value: arg })?;
-                #fi = Some(v)
+        match arg.arg_type() {
+            CommandArgType::Flag { long, short } => {
+                arg_default = Some(quote! { false });
+
+                option_name_arms.push(create_option_name_arm(
+                    short,
+                    long,
+                    quote! {
+                        {
+                            #fi = Some(true);
+                            state = States::Normal;
+                        }
+                    },
+                ));
+            }
+            CommandArgType::Option { long, short } => {
+                arg_default = None;
+                let state = format_ident!(
+                    "Expect{}",
+                    arg.name().from_case(Case::Snake).to_case(Case::Pascal)
+                );
+                extra_states.push(quote! { #state, });
+
+                let parse_value = create_parse_arg_value(ty);
+                option_value_arms.push(quote! {
+                    _cli::arguments::Arg::Value(val) if state == States::#state => {
+                        #fi = Some(#parse_value);
+                        state = States::Normal;
+                    }
+                });
+
+                option_name_arms.push(create_option_name_arm(
+                    short,
+                    long,
+                    quote! { state = States::#state },
+                ));
+            }
+            CommandArgType::Positional => {
+                arg_default = None;
+                let parse_value = create_parse_arg_value(ty);
+
+                positional_value_arms.push(quote! {
+                    #arg_pos => {
+                        #fi = Some(#parse_value);
+                    },
+                });
+                arg_pos += 1;
+            }
+        }
+
+        //TODO: correct errors
+        let constructor_arg = match arg.ty() {
+            ArgType::Option => quote! { #fi },
+            ArgType::Normal => {
+                if let Some(default) = arg_default {
+                    quote! {
+                        #fi: #fi.unwrap_or(#default)
+                    }
+                } else {
+                    quote! {
+                        #fi: #fi.ok_or(_cli::service::ParseError::NotEnoughArguments)?
+                    }
+                }
             }
         };
 
-        //TODO: correct errors
-        let var_name = match arg.ty() {
-            ArgType::Option => quote! {
-                #fi,
-            },
-            ArgType::Normal => quote! {
-                #arg_decl #fi.ok_or(_cli::service::ParseError::NotEnoughArguments)?,
-            },
-        };
-        variables.push(var_decl);
-        arguments.push(var_name);
-        match_arms.push(match_arm);
+        variables.push(quote! {
+            let mut #fi = None;
+        });
+        arguments.push(quote! {
+            #constructor_arg,
+        });
     }
+
+    let value_arm = if positional_value_arms.is_empty() {
+        quote! {
+            _cli::arguments::Arg::Value(_) if state == States::Normal =>
+            return Err(_cli::service::ParseError::TooManyArguments{
+                expected: arg_pos
+            })
+        }
+    } else {
+        quote! {
+            _cli::arguments::Arg::Value(val) if state == States::Normal => {
+                match arg_pos {
+                    #(#positional_value_arms)*
+                    _ => return Err(_cli::service::ParseError::TooManyArguments{
+                        expected: arg_pos
+                    })
+                }
+                arg_pos += 1;
+            }
+        }
+    };
 
     let parsing = quote! {
         #(#variables)*
-        for (i, arg) in command.args().iter().enumerate() {
-            match i {
-                #(#match_arms)*
-                _ => return Err(_cli::service::ParseError::TooManyArguments{
-                    expected: i
-                })
+
+        #[derive(Eq, PartialEq)]
+        enum States {
+            Normal,
+            #(#extra_states)*
+        }
+        let mut state = States::Normal;
+        let mut arg_pos = 0;
+
+        for arg in command.args().args() {
+            let arg = arg.map_err(|_| _cli::service::ParseError::Other(""))?;
+            match arg {
+                #(#option_name_arms)*
+                #(#option_value_arms)*
+                #value_arm,
+                _cli::arguments::Arg::Value(_) => unreachable!(),
+                _cli::arguments::Arg::LongOption(option) => {
+                    return Err(_cli::service::ParseError::UnknownOption { name: option })
+                }
+                _cli::arguments::Arg::ShortOption(option) => {
+                    return Err(_cli::service::ParseError::UnknownFlag { flag: option })
+                }
+                _cli::arguments::Arg::DoubleDash => {}
             }
         }
     };
 
     (parsing, arguments)
+}
+
+fn create_option_name_arm(
+    short: &Option<char>,
+    long: &Option<String>,
+    action: TokenStream,
+) -> TokenStream {
+    match (short, long) {
+        (Some(short), Some(long)) => {
+            quote! {
+                _cli::arguments::Arg::LongOption(#long)
+                | _cli::arguments::Arg::ShortOption(#short) => #action,
+            }
+        }
+        (Some(short), None) => {
+            quote! {
+                _cli::arguments::Arg::ShortOption(#short) => #action,
+            }
+        }
+        (None, Some(long)) => {
+            quote! {
+                _cli::arguments::Arg::LongOption(#long) => #action,
+            }
+        }
+        (None, None) => unreachable!(),
+    }
+}
+
+fn create_parse_arg_value(ty: &TokenStream) -> TokenStream {
+    quote! {
+        <#ty as _cli::arguments::FromArgument>::from_arg(val).map_err(|_|
+            _cli::service::ParseError::ParseArgumentError { value: val }
+        )?,
+    }
 }
