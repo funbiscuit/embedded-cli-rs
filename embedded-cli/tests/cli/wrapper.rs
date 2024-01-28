@@ -1,6 +1,7 @@
 use std::{cell::RefCell, convert::Infallible, fmt::Debug, rc::Rc};
 
 use embedded_cli::{
+    arguments::{Arg as CliArg, ArgError},
     cli::{Cli, CliBuilder, CliHandle},
     command::RawCommand as CliRawCommand,
     service::{Autocomplete, CommandProcessor, Help, ParseError as CliParseError, ProcessError},
@@ -50,9 +51,17 @@ macro_rules! impl_convert {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Arg {
+    DoubleDash,
+    LongOption(String),
+    ShortOption(char),
+    Value(String),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RawCommand {
     pub name: String,
-    pub args: Vec<String>,
+    pub args: Vec<Result<Arg, ArgError>>,
 }
 
 impl_convert! {CliRawCommand<'_> => RawCommand, command, {
@@ -65,7 +74,19 @@ impl<'a> From<CliRawCommand<'a>> for RawCommand {
     fn from(value: CliRawCommand<'a>) -> Self {
         Self {
             name: value.name().to_string(),
-            args: value.args().iter().map(str::to_string).collect(),
+            args: value
+                .args()
+                .args()
+                .map(|arg| match arg {
+                    Ok(arg) => Ok(match arg {
+                        CliArg::DoubleDash => Arg::DoubleDash,
+                        CliArg::LongOption(name) => Arg::LongOption(name.to_string()),
+                        CliArg::ShortOption(name) => Arg::ShortOption(name),
+                        CliArg::Value(value) => Arg::Value(value.to_string()),
+                    }),
+                    Err(err) => Err(err),
+                })
+                .collect(),
         }
     }
 }

@@ -30,8 +30,10 @@ pub struct RawCommand<'a> {
 
 impl<'a> RawCommand<'a> {
     /// Crate raw command from input tokens
-    pub(crate) fn from_tokens(mut tokens: Tokens<'_>) -> Option<RawCommand<'_>> {
-        let name = tokens.remove(0)?;
+    pub(crate) fn from_tokens(tokens: &Tokens<'a>) -> Option<Self> {
+        let mut iter = tokens.iter();
+        let name = iter.next()?;
+        let tokens = iter.into_tokens();
 
         Some(RawCommand {
             name,
@@ -130,7 +132,7 @@ mod tests {
         let arg_tokens = Tokens::new(args).unwrap();
 
         assert_eq!(
-            RawCommand::from_tokens(input_tokens).unwrap(),
+            RawCommand::from_tokens(&input_tokens).unwrap(),
             RawCommand {
                 name: name,
                 args: ArgList::new(arg_tokens)
@@ -146,6 +148,6 @@ mod tests {
         let input = core::str::from_utf8_mut(&mut input).unwrap();
         let tokens = Tokens::new(input).unwrap();
 
-        assert!(RawCommand::from_tokens(tokens).is_none());
+        assert!(RawCommand::from_tokens(&tokens).is_none());
     }
 }
