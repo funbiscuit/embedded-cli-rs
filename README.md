@@ -47,7 +47,7 @@ Add `embedded-cli` and necessary crates to your app:
 
 ```toml
 [dependencies]
-embedded-cli = "0.1.1"
+embedded-cli = "0.1.2"
 embedded-io = "0.6.1"
 ufmt = "0.2.0"
 ```
@@ -331,14 +331,14 @@ Memory usage might change in future versions, but I'll try to keep this table up
 
 | Features                        | ROM, bytes | Static RAM, bytes |
 |---------------------------------|:----------:|:-----------------:|
-|                                 |    9006    |        161        |
-| `autocomplete`                  |   10906    |        181        |
-| `history`                       |   11094    |        193        |
-| `autocomplete` `history`        |   12588    |        213        |
-| `help`                          |   11706    |        551        |
-| `autocomplete` `help`           |   13452    |        567        |
-| `history` `help`                |   13552    |        583        |
-| `autocomplete` `history` `help` |   15056    |        599        |
+|                                 |    8588    |        161        |
+| `autocomplete`                  |   10340    |        181        |
+| `history`                       |   10696    |        193        |
+| `autocomplete` `history`        |   12162    |        213        |
+| `help`                          |   11228    |        551        |
+| `autocomplete` `help`           |   13052    |        567        |
+| `history` `help`                |   13434    |        583        |
+| `autocomplete` `history` `help` |   14854    |        599        |
 
 This table is generated using this [script](examples/arduino/memory.sh).
 As table shows, enabling help adds quite a lot to memory usage since help usually requires a lot of text to be stored.
