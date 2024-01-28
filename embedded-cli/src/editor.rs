@@ -39,47 +39,53 @@ impl<B: Buffer> Editor<B> {
     #[cfg(feature = "autocomplete")]
     /// Calls given function to create autocompletion of current input
     pub fn autocompletion(&mut self, f: impl FnOnce(Request<'_>, &mut Autocompletion<'_>)) {
-        // SAFETY: self.valid is always less than or equal to buffer len
-        let (text, buf) = unsafe { utils::split_at_mut(self.buffer.as_slice_mut(), self.valid) };
+        let text = self.text();
 
-        // SAFETY: buffer stores only valid utf-8 bytes 0..valid range
-        let mut text = unsafe { core::str::from_utf8_unchecked(text) };
-        let mut removed_spaces = 0;
-
-        if let Some(pos) = utils::char_byte_index(text, self.cursor) {
+        let removed_spaces = if let Some(pos) = utils::char_byte_index(text, self.cursor) {
             // cursor is inside text, so trim all whitespace, that is on the right to the cursor
             let right = &text.as_bytes()[pos..];
-            let pos2 = right
+            right
                 .iter()
                 .rev()
                 .position(|&b| b != b' ')
-                .unwrap_or(right.len());
-            // SAFETY: pos2 is at the char boundary
-            text = unsafe { text.get_unchecked(..text.len() - pos2) };
-            removed_spaces = pos2;
-        }
+                .unwrap_or(right.len())
+        } else {
+            0
+        };
+        let request_len = text.len() - removed_spaces;
 
+        // SAFETY: request_len is always less than or equal to buffer len
+        let (text, buf) = unsafe { utils::split_at_mut(self.buffer.as_slice_mut(), request_len) };
+        // SAFETY: request_len is guaranteed to be inside text slice and at char boundary
+        let text = unsafe { core::str::from_utf8_unchecked(text) };
+
+        // SAFETY: in `new` we checked that Request can be created from this input
         if let Some(request) = Request::from_input(text) {
             let mut autocompletion = Autocompletion::new(buf);
+
             f(request, &mut autocompletion);
 
             // process autocompletion
             if let Some(autocompleted) = autocompletion.autocompleted() {
-                let mut bytes = autocompleted.len();
-                let is_partial = autocompletion.is_partial();
-                if !is_partial && buf.len() > bytes {
-                    buf[bytes] = b' ';
-                    bytes += 1;
+                let autocompleted = autocompleted.len();
+                self.valid = request_len + autocompleted;
+                if !autocompletion.is_partial() && self.valid < self.buffer.len() {
+                    self.buffer.as_slice_mut()[self.valid] = b' ';
+                    self.valid += 1;
                 }
-                if removed_spaces > 0 {
-                    // shift autocompleted text to the left
-                    self.buffer
-                        .as_slice_mut()
-                        .copy_within(self.valid.., self.valid - removed_spaces);
-                    self.valid -= removed_spaces;
-                }
-                self.valid += bytes;
                 self.cursor = self.len();
+                return;
+            }
+        }
+
+        // autocompletion was not successful, so restore removed spaces
+        if removed_spaces > 0 {
+            // SAFETY: given range is always inside slice
+            unsafe {
+                self.buffer
+                    .as_slice_mut()
+                    .get_unchecked_mut(self.valid - removed_spaces..self.valid)
+                    .fill(b' ');
             }
         }
     }
@@ -167,12 +173,18 @@ impl<B: Buffer> Editor<B> {
 
     pub fn text(&self) -> &str {
         // SAFETY: buffer stores only valid utf-8 bytes 0..valid range
-        unsafe { core::str::from_utf8_unchecked(&self.buffer.as_slice()[..self.valid]) }
+        unsafe {
+            core::str::from_utf8_unchecked(self.buffer.as_slice().get_unchecked(..self.valid))
+        }
     }
 
     pub fn text_mut(&mut self) -> &mut str {
         // SAFETY: buffer stores only valid utf-8 bytes 0..valid range
-        unsafe { core::str::from_utf8_unchecked_mut(&mut self.buffer.as_slice_mut()[..self.valid]) }
+        unsafe {
+            core::str::from_utf8_unchecked_mut(
+                self.buffer.as_slice_mut().get_unchecked_mut(..self.valid),
+            )
+        }
     }
 
     /// Returns text in subrange of this editor. start is including, end is exclusive
