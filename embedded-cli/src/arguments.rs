@@ -195,7 +195,7 @@ mod tests {
     fn arg_tokens(#[case] input: &str, #[case] expected: &[Result<Arg<'_>, ArgError>]) {
         let mut input = input.as_bytes().to_vec();
         let input = core::str::from_utf8_mut(&mut input).unwrap();
-        let tokens = Tokens::new(input).unwrap();
+        let tokens = Tokens::new(input);
         let args = ArgList::new(tokens);
         let mut iter = args.args();
 
@@ -214,7 +214,7 @@ mod tests {
     fn test_iter(#[case] input: &str, #[case] expected: &[&str]) {
         let mut input = input.as_bytes().to_vec();
         let input = core::str::from_utf8_mut(&mut input).unwrap();
-        let tokens = Tokens::new(input).unwrap();
+        let tokens = Tokens::new(input);
         let args = ArgList::new(tokens);
         #[allow(deprecated)]
         let mut iter = args.iter();
@@ -229,12 +229,12 @@ mod tests {
     fn test_eq() {
         let mut input = b"arg1 arg2".to_vec();
         let input = core::str::from_utf8_mut(&mut input).unwrap();
-        let tokens = Tokens::new(input).unwrap();
+        let tokens = Tokens::new(input);
         let args1 = ArgList::new(tokens);
 
         let mut input = b"   arg1    arg2  ".to_vec();
         let input = core::str::from_utf8_mut(&mut input).unwrap();
-        let tokens = Tokens::new(input).unwrap();
+        let tokens = Tokens::new(input);
         let args2 = ArgList::new(tokens);
 
         assert_eq!(args1, args2)

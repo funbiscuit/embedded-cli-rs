@@ -57,7 +57,7 @@ mod tests {
     fn parsing_ok(#[case] input: &str, #[case] expected: HelpRequest<'_>) {
         let mut input = input.as_bytes().to_vec();
         let input = core::str::from_utf8_mut(&mut input).unwrap();
-        let tokens = Tokens::new(input).unwrap();
+        let tokens = Tokens::new(input);
 
         assert_eq!(HelpRequest::from_tokens(&tokens), Some(expected));
     }
@@ -71,7 +71,7 @@ mod tests {
     fn parsing_err(#[case] input: &str) {
         let mut input = input.as_bytes().to_vec();
         let input = core::str::from_utf8_mut(&mut input).unwrap();
-        let tokens = Tokens::new(input).unwrap();
+        let tokens = Tokens::new(input);
         let res = HelpRequest::from_tokens(&tokens);
         std::dbg!(&res);
         assert!(res.is_none());
