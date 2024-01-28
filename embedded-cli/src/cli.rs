@@ -341,18 +341,11 @@ where
         handler: &mut P,
     ) -> Result<(), E> {
         #[cfg(feature = "help")]
-        match HelpRequest::from_tokens(tokens) {
-            Ok(request) => {
-                self.process_help::<C>(request)?;
-            }
-            Err(tokens) => {
-                if let Some(command) = RawCommand::from_tokens(tokens) {
-                    self.process_command(command, handler)?;
-                };
-            }
+        if let Some(request) = HelpRequest::from_tokens(&tokens) {
+            self.process_help::<C>(request)?;
         }
-        #[cfg(not(feature = "help"))]
-        if let Some(command) = RawCommand::from_tokens(tokens) {
+
+        if let Some(command) = RawCommand::from_tokens(&tokens) {
             self.process_command(command, handler)?;
         };
 

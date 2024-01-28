@@ -9,7 +9,7 @@
 [![Coverage Status](https://img.shields.io/codecov/c/github/funbiscuit/embedded-cli-rs/main?style=flat-square)](https://app.codecov.io/github/funbiscuit/embedded-cli-rs)
 
 [Demo](examples/arduino/README.md) of CLI running on Arduino Nano.
-Memory usage: 14KiB of ROM and 0.5KiB of static RAM. Most of static RAM is used by help strings.
+Memory usage: 15KiB of ROM and 0.6KiB of static RAM. Most of static RAM is used by help strings.
 
 ![Arduino Demo](examples/arduino/demo.gif)
 
@@ -331,14 +331,14 @@ Memory usage might change in future versions, but I'll try to keep this table up
 
 | Features                        | ROM, bytes | Static RAM, bytes |
 |---------------------------------|:----------:|:-----------------:|
-|                                 |    9388    |        161        |
-| `autocomplete`                  |   11126    |        181        |
-| `history`                       |   11248    |        193        |
-| `autocomplete` `history`        |   12748    |        213        |
-| `help`                          |   12204    |        557        |
-| `autocomplete` `help`           |   13916    |        573        |
-| `history` `help`                |   14456    |        589        |
-| `autocomplete` `history` `help` |   15538    |        605        |
+|                                 |    9006    |        161        |
+| `autocomplete`                  |   10906    |        181        |
+| `history`                       |   11094    |        193        |
+| `autocomplete` `history`        |   12588    |        213        |
+| `help`                          |   11706    |        551        |
+| `autocomplete` `help`           |   13452    |        567        |
+| `history` `help`                |   13552    |        583        |
+| `autocomplete` `history` `help` |   15056    |        599        |
 
 This table is generated using this [script](examples/arduino/memory.sh).
 As table shows, enabling help adds quite a lot to memory usage since help usually requires a lot of text to be stored.

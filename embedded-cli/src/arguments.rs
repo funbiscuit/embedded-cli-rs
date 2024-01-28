@@ -30,36 +30,32 @@ pub enum Arg<'a> {
 
 #[derive(Clone, Debug, Eq)]
 pub struct ArgList<'a> {
-    args: &'a str,
-    empty: bool,
+    tokens: Tokens<'a>,
 }
 
 impl<'a> ArgList<'a> {
     /// Create new arg list from given tokens
     pub fn new(tokens: Tokens<'a>) -> Self {
-        let empty = tokens.is_empty();
-        Self {
-            args: tokens.into_raw(),
-            empty,
-        }
+        Self { tokens }
     }
 
     pub fn args(&self) -> impl Iterator<Item = Result<Arg<'a>, ArgError>> {
-        ArgsIter::new(TokensIter::new(self.args, self.empty))
+        ArgsIter::new(self.tokens.iter())
     }
 
+    #[deprecated(since = "0.1.2", note = "please use `args` instead")]
     pub fn iter(&self) -> impl Iterator<Item = &'a str> {
-        TokensIter::new(self.args, self.empty)
+        self.tokens.iter()
     }
 }
 
 impl<'a> PartialEq for ArgList<'a> {
     fn eq(&self, other: &Self) -> bool {
-        self.iter().eq(other.iter())
+        self.args().eq(other.args())
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ArgError {
     NonAsciiShortOption,
 }
@@ -220,6 +216,7 @@ mod tests {
         let input = core::str::from_utf8_mut(&mut input).unwrap();
         let tokens = Tokens::new(input).unwrap();
         let args = ArgList::new(tokens);
+        #[allow(deprecated)]
         let mut iter = args.iter();
 
         for &arg in expected {

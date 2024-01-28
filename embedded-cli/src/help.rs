@@ -1,4 +1,7 @@
-use crate::token::Tokens;
+use crate::{
+    arguments::{Arg, ArgList},
+    token::Tokens,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum HelpRequest<'a> {
@@ -11,36 +14,27 @@ pub enum HelpRequest<'a> {
 
 impl<'a> HelpRequest<'a> {
     /// Tries to create new help request from input tokens
-    /// If unsuccessfull, tokens are not modified and returned in Err variant
-    pub fn from_tokens(mut tokens: Tokens<'a>) -> Result<Self, Tokens<'a>> {
+    pub fn from_tokens(tokens: &Tokens<'a>) -> Option<Self> {
         let mut iter = tokens.iter();
+        let command = iter.next()?;
 
         // check if first token is help
-        if iter.next() == Some("help") {
-            drop(iter);
-            // remove "help" token
-            tokens.remove(0);
-            if let Some(command) = tokens.remove(0) {
-                Ok(HelpRequest::Command(command))
+        if command == "help" {
+            if let Some(command) = iter.next() {
+                Some(HelpRequest::Command(command))
             } else {
-                Ok(HelpRequest::All)
+                Some(HelpRequest::All)
             }
         }
-        // check if any other token is -h or --help
-        else if let Some(pos) = iter.position(|token| {
-            //TODO: allow to collapse -h with other options.
-            // for example -vhs contains -h option
-            token == "--help" || token == "-h"
-        }) {
-            drop(iter);
-            tokens.remove(pos + 1);
-            // SAFETY: first element always exists: we called .next() once in first if
-            let command = unsafe { tokens.remove(0).unwrap_unchecked() };
-
-            Ok(HelpRequest::Command(command))
+        // check if any other option is -h or --help
+        else if ArgList::new(iter.into_tokens())
+            .args()
+            .flatten()
+            .any(|arg| arg == Arg::LongOption("help") || arg == Arg::ShortOption('h'))
+        {
+            Some(HelpRequest::Command(command))
         } else {
-            drop(iter);
-            Err(tokens)
+            None
         }
     }
 }
@@ -58,12 +52,14 @@ mod tests {
     #[case("help cmd1", HelpRequest::Command("cmd1"))]
     #[case("cmd2 --help", HelpRequest::Command("cmd2"))]
     #[case("cmd3 -v --opt --help --some", HelpRequest::Command("cmd3"))]
+    #[case("cmd3 -vh --opt --some", HelpRequest::Command("cmd3"))]
+    #[case("cmd3 -hv --opt --some", HelpRequest::Command("cmd3"))]
     fn parsing_ok(#[case] input: &str, #[case] expected: HelpRequest<'_>) {
         let mut input = input.as_bytes().to_vec();
         let input = core::str::from_utf8_mut(&mut input).unwrap();
         let tokens = Tokens::new(input).unwrap();
 
-        assert_eq!(HelpRequest::from_tokens(tokens), Ok(expected));
+        assert_eq!(HelpRequest::from_tokens(&tokens), Some(expected));
     }
 
     #[rstest]
@@ -76,8 +72,8 @@ mod tests {
         let mut input = input.as_bytes().to_vec();
         let input = core::str::from_utf8_mut(&mut input).unwrap();
         let tokens = Tokens::new(input).unwrap();
-        let res = HelpRequest::from_tokens(tokens);
+        let res = HelpRequest::from_tokens(&tokens);
         std::dbg!(&res);
-        assert!(res.is_err());
+        assert!(res.is_none());
     }
 }
