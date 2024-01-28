@@ -215,9 +215,8 @@ where
                 self.history.push(editor.text());
                 let text = editor.text_mut();
 
-                if let Some(tokens) = Tokens::new(text) {
-                    self.process_input::<C, _>(tokens, processor)?;
-                }
+                let tokens = Tokens::new(text);
+                self.process_input::<C, _>(tokens, processor)?;
 
                 editor.clear();
 

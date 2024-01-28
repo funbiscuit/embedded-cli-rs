@@ -5,7 +5,7 @@ pub struct Tokens<'a> {
 }
 
 impl<'a> Tokens<'a> {
-    pub fn new(input: &'a mut str) -> Option<Self> {
+    pub fn new(input: &'a mut str) -> Self {
         // SAFETY: bytes are modified correctly, so they remain utf8
         let bytes = unsafe { input.as_bytes_mut() };
 
@@ -72,7 +72,7 @@ impl<'a> Tokens<'a> {
         // SAFETY: bytes are still a valid utf8 sequence
         // insert is inside bytes slice
         let tokens = unsafe { core::str::from_utf8_unchecked(bytes.get_unchecked(..insert)) };
-        Some(Self { empty, tokens })
+        Self { empty, tokens }
     }
 
     /// Returns raw representation of tokens (delimited with 0)
@@ -156,7 +156,7 @@ mod tests {
     fn create(#[case] input: &str, #[case] expected: &str) {
         let mut input = input.as_bytes().to_vec();
         let input = core::str::from_utf8_mut(&mut input).unwrap();
-        let result = Tokens::new(input).unwrap();
+        let result = Tokens::new(input);
 
         assert_eq!(result.tokens, expected);
         let len = result.tokens.len();

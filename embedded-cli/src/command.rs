@@ -126,10 +126,10 @@ mod tests {
     fn parsing_some(#[case] input: &str, #[case] name: &str, #[case] args: &str) {
         let mut input = input.as_bytes().to_vec();
         let input = core::str::from_utf8_mut(&mut input).unwrap();
-        let input_tokens = Tokens::new(input).unwrap();
+        let input_tokens = Tokens::new(input);
         let mut args = args.as_bytes().to_vec();
         let args = core::str::from_utf8_mut(&mut args).unwrap();
-        let arg_tokens = Tokens::new(args).unwrap();
+        let arg_tokens = Tokens::new(args);
 
         assert_eq!(
             RawCommand::from_tokens(&input_tokens).unwrap(),
@@ -146,7 +146,7 @@ mod tests {
     fn parsing_none(#[case] input: &str) {
         let mut input = input.as_bytes().to_vec();
         let input = core::str::from_utf8_mut(&mut input).unwrap();
-        let tokens = Tokens::new(input).unwrap();
+        let tokens = Tokens::new(input);
 
         assert!(RawCommand::from_tokens(&tokens).is_none());
     }
