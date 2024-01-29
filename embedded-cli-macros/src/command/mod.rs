@@ -19,6 +19,9 @@ mod parse;
 #[darling(default, attributes(command), forward_attrs(allow, doc, cfg))]
 struct ServiceAttrs {
     help_title: Option<String>,
+    skip_autocomplete: bool,
+    skip_help: bool,
+    skip_from_raw: bool,
 }
 
 pub fn derive_command(input: DeriveInput) -> Result<TokenStream> {
@@ -48,9 +51,21 @@ pub fn derive_command(input: DeriveInput) -> Result<TokenStream> {
 
     let help_title = opts.help_title.unwrap_or("Commands".to_string());
 
-    let derive_autocomplete = autocomplete::derive_autocomplete(&target, &commands)?;
-    let derive_help = help::derive_help(&target, &help_title, &commands)?;
-    let derive_from_raw = parse::derive_from_raw(&target, &commands)?;
+    let derive_autocomplete = if opts.skip_autocomplete {
+        quote! {}
+    } else {
+        autocomplete::derive_autocomplete(&target, &commands)?
+    };
+    let derive_help = if opts.skip_help {
+        quote! {}
+    } else {
+        help::derive_help(&target, &help_title, &commands)?
+    };
+    let derive_from_raw = if opts.skip_from_raw {
+        quote! {}
+    } else {
+        parse::derive_from_raw(&target, &commands)?
+    };
     let impl_processor = processor::impl_processor(&target)?;
 
     let output = quote! {
