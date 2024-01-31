@@ -70,10 +70,12 @@ fn create_arg_parsing(args: &[CommandArg]) -> (TokenStream, Vec<TokenStream>) {
     let mut extra_states = vec![];
     let mut option_name_arms = vec![];
     let mut option_value_arms = vec![];
+    let mut subcommand_value_arm = None;
 
-    let mut arg_pos = 0usize;
+    let mut positional = 0usize;
     for arg in args.iter() {
-        let fi = format_ident!("{}", arg.name());
+        let fi_raw = format_ident!("{}", arg.name());
+        let fi = format_ident!("arg_{}", arg.name());
         let ty = arg.field_type();
 
         let arg_default;
@@ -120,25 +122,38 @@ fn create_arg_parsing(args: &[CommandArg]) -> (TokenStream, Vec<TokenStream>) {
                 let parse_value = create_parse_arg_value(ty);
 
                 positional_value_arms.push(quote! {
-                    #arg_pos => {
+                    #positional => {
                         #fi = Some(#parse_value);
                     },
                 });
-                arg_pos += 1;
+                positional += 1;
+            }
+            CommandArgType::SubCommand => {
+                // in model we checked that subcommand is only one and there is no positional args
+                arg_default = None;
+
+                subcommand_value_arm = Some(quote! {
+                    let args = args.into_args();
+                    let raw = _cli::command::RawCommand::new(name, args);
+
+                    #fi = Some(<#ty as _cli::service::FromRaw>::parse(raw)?);
+
+                    break;
+                });
             }
         }
 
         //TODO: correct errors
         let constructor_arg = match arg.ty() {
-            ArgType::Option => quote! { #fi },
+            ArgType::Option => quote! { #fi_raw: #fi },
             ArgType::Normal => {
                 if let Some(default) = arg_default {
                     quote! {
-                        #fi: #fi.unwrap_or(#default)
+                        #fi_raw: #fi.unwrap_or(#default)
                     }
                 } else {
                     quote! {
-                        #fi: #fi.ok_or(_cli::service::ParseError::NotEnoughArguments)?
+                        #fi_raw: #fi.ok_or(_cli::service::ParseError::NotEnoughArguments)?
                     }
                 }
             }
@@ -152,23 +167,29 @@ fn create_arg_parsing(args: &[CommandArg]) -> (TokenStream, Vec<TokenStream>) {
         });
     }
 
-    let value_arm = if positional_value_arms.is_empty() {
+    let value_arm = if let Some(subcommand_arm) = subcommand_value_arm {
+        quote! {
+            _cli::arguments::Arg::Value(name) if state == States::Normal => {
+                #subcommand_arm
+            }
+        }
+    } else if positional_value_arms.is_empty() {
         quote! {
             _cli::arguments::Arg::Value(_) if state == States::Normal =>
             return Err(_cli::service::ParseError::TooManyArguments{
-                expected: arg_pos
+                expected: positional
             })
         }
     } else {
         quote! {
             _cli::arguments::Arg::Value(val) if state == States::Normal => {
-                match arg_pos {
+                match positional {
                     #(#positional_value_arms)*
                     _ => return Err(_cli::service::ParseError::TooManyArguments{
-                        expected: arg_pos
+                        expected: positional
                     })
                 }
-                arg_pos += 1;
+                positional += 1;
             }
         }
     };
@@ -182,9 +203,10 @@ fn create_arg_parsing(args: &[CommandArg]) -> (TokenStream, Vec<TokenStream>) {
             #(#extra_states)*
         }
         let mut state = States::Normal;
-        let mut arg_pos = 0;
+        let mut positional = 0;
 
-        for arg in command.args().args() {
+        let mut args = command.args().args();
+        while let Some(arg) = args.next() {
             let arg = arg.map_err(|_| _cli::service::ParseError::Other(""))?;
             match arg {
                 #(#option_name_arms)*
@@ -205,7 +227,7 @@ fn create_arg_parsing(args: &[CommandArg]) -> (TokenStream, Vec<TokenStream>) {
     (parsing, arguments)
 }
 
-fn create_option_name_arm(
+pub fn create_option_name_arm(
     short: &Option<char>,
     long: &Option<String>,
     action: TokenStream,

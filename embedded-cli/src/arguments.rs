@@ -39,7 +39,7 @@ impl<'a> ArgList<'a> {
         Self { tokens }
     }
 
-    pub fn args(&self) -> impl Iterator<Item = Result<Arg<'a>, ArgError>> {
+    pub fn args(&self) -> ArgsIter<'a> {
         ArgsIter::new(self.tokens.iter())
     }
 
@@ -60,7 +60,8 @@ pub enum ArgError {
     NonAsciiShortOption,
 }
 
-struct ArgsIter<'a> {
+#[derive(Debug)]
+pub struct ArgsIter<'a> {
     values_only: bool,
 
     /// Short options (ASCII chars) that
@@ -77,6 +78,14 @@ impl<'a> ArgsIter<'a> {
             leftover: &[],
             tokens,
         }
+    }
+
+    /// Converts whats left in this iterator back to `ArgList`
+    ///
+    /// If iterator was in the middle of iterating of collapsed
+    /// short options (like `-vhs`), non iterated options are discarded
+    pub fn into_args(self) -> ArgList<'a> {
+        ArgList::new(self.tokens.into_tokens())
     }
 }
 

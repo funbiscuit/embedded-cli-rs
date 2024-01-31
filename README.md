@@ -333,12 +333,12 @@ Memory usage might change in future versions, but I'll try to keep this table up
 |---------------------------------|:----------:|:-----------------:|
 |                                 |    8588    |        161        |
 | `autocomplete`                  |   10340    |        181        |
-| `history`                       |   10696    |        193        |
-| `autocomplete` `history`        |   12162    |        213        |
-| `help`                          |   11228    |        551        |
-| `autocomplete` `help`           |   13052    |        567        |
-| `history` `help`                |   13434    |        583        |
-| `autocomplete` `history` `help` |   14854    |        599        |
+| `history`                       |   10686    |        193        |
+| `autocomplete` `history`        |   12152    |        213        |
+| `help`                          |   11336    |        552        |
+| `autocomplete` `help`           |   13168    |        568        |
+| `history` `help`                |   13732    |        584        |
+| `autocomplete` `history` `help` |   14930    |        600        |
 
 This table is generated using this [script](examples/arduino/memory.sh).
 As table shows, enabling help adds quite a lot to memory usage since help usually requires a lot of text to be stored.

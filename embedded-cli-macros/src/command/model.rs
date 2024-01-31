@@ -70,6 +70,12 @@ struct ArgAttrs {
     long: Option<LongName>,
 }
 
+#[derive(Debug, FromField, Default)]
+#[darling(default, attributes(command), forward_attrs(allow, doc, cfg))]
+struct FieldCommandAttrs {
+    subcommand: bool,
+}
+
 pub enum CommandArgs {
     None,
     Named(Vec<CommandArg>),
@@ -90,12 +96,24 @@ pub enum CommandArgType {
         short: Option<char>,
     },
     Positional,
+    SubCommand,
 }
 
+#[allow(unused)]
 impl CommandArgType {
-    #[cfg(feature = "help")]
+    pub fn is_option(&self) -> bool {
+        matches!(
+            self,
+            CommandArgType::Flag { .. } | CommandArgType::Option { .. }
+        )
+    }
+
     pub fn is_positional(&self) -> bool {
         self == &CommandArgType::Positional
+    }
+
+    pub fn is_subcommand(&self) -> bool {
+        self == &CommandArgType::SubCommand
     }
 }
 
@@ -110,6 +128,8 @@ pub struct CommandArg {
 
 impl CommandArg {
     fn parse(field: &Field) -> Result<Self> {
+        let command_attrs = FieldCommandAttrs::from_field(field)?;
+
         let arg_attrs = ArgAttrs::from_field(field)?;
 
         let field_name = field
@@ -151,6 +171,8 @@ impl CommandArg {
             } else {
                 CommandArgType::Option { long, short }
             }
+        } else if command_attrs.subcommand {
+            CommandArgType::SubCommand
         } else {
             CommandArgType::Positional
         };
@@ -212,6 +234,9 @@ impl Command {
                 .to_case(Case::Kebab)
         });
 
+        let mut has_subcommand = false;
+        let mut has_positional = false;
+
         let args = match &variant.fields {
             Fields::Unit => CommandArgs::None,
             Fields::Unnamed(fields) => {
@@ -225,7 +250,37 @@ impl Command {
                 let args = fields
                     .named
                     .iter()
-                    .filter_map(|field| errors.handle_in(|| CommandArg::parse(field)))
+                    .filter_map(|field| {
+                        errors.handle_in(|| {
+                            let arg = CommandArg::parse(field)?;
+
+                            match arg.arg_type() {
+                                CommandArgType::Positional if has_subcommand => {
+                                    return Err(Error::custom(
+                                        "Command cannot have both positional arguments and subcommand",
+                                    )
+                                    .with_span(&field.ident))
+                                },
+                                CommandArgType::SubCommand if has_positional => {
+                                    return Err(Error::custom(
+                                        "Command cannot have both positional arguments and subcommand",
+                                    )
+                                    .with_span(&field.ident))
+                                },
+                                CommandArgType::SubCommand if has_subcommand => {
+                                    return Err(Error::custom(
+                                        "Command can have only single subcommand",
+                                    )
+                                    .with_span(&field.ident))
+                                },
+                                _ => {}
+                            }
+                            has_positional |= arg.arg_type().is_positional();
+                            has_subcommand |= arg.arg_type().is_subcommand();
+
+                            Ok(arg)
+                        })
+                    })
                     .collect::<Vec<_>>();
                 errors.finish()?;
 
@@ -257,5 +312,13 @@ impl Command {
 
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    #[cfg(feature = "help")]
+    pub fn subcommand(&self) -> Option<&CommandArg> {
+        match &self.args {
+            CommandArgs::Named(args) => args.iter().find(|arg| arg.arg_type.is_subcommand()),
+            _ => None,
+        }
     }
 }

@@ -6,7 +6,7 @@ use crate::{cli::CliHandle, command::RawCommand};
 use crate::autocomplete::{Autocompletion, Request};
 
 #[cfg(feature = "help")]
-use crate::{help::HelpRequest, writer::Writer};
+use crate::writer::Writer;
 
 #[derive(Debug)]
 pub enum ProcessError<'a, E: embedded_io::Error> {
@@ -58,20 +58,30 @@ pub trait Autocomplete {
     fn autocomplete(request: Request<'_>, autocompletion: &mut Autocompletion<'_>);
 }
 
+// trait is kept available so it's possible to use same where clause
 pub trait Help {
-    /// Return length of longest command, contained in this service
-    fn longest_command() -> usize {
-        0
-    }
-
-    // trait is kept available so it's possible to use same where clause
     #[cfg(feature = "help")]
-    /// Try to process help request
+    /// How many commands are known
+    fn command_count() -> usize;
+
+    #[cfg(feature = "help")]
+    /// Print all commands and short description of each
+    fn list_commands<W: Write<Error = E>, E: embedded_io::Error>(
+        writer: &mut Writer<'_, W, E>,
+    ) -> Result<(), E>;
+
+    #[cfg(feature = "help")]
+    /// Print help for given command. Command might contain -h or --help options
     /// Use given writer to print help text
-    /// If help request cannot be processed by this service,
+    /// If help request cannot be processed by this object,
     /// Err(HelpError::UnknownCommand) must be returned
-    fn help<W: Write<Error = E>, E: embedded_io::Error>(
-        request: HelpRequest<'_>,
+    fn command_help<
+        W: Write<Error = E>,
+        E: embedded_io::Error,
+        F: FnMut(&mut Writer<'_, W, E>) -> Result<(), E>,
+    >(
+        parent: &mut F,
+        command: RawCommand<'_>,
         writer: &mut Writer<'_, W, E>,
     ) -> Result<(), HelpError<E>>;
 }

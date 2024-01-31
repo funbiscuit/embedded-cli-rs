@@ -30,11 +30,28 @@ macro_rules! impl_convert {
 
         impl embedded_cli::service::Help for $to_ty {
             #[cfg(feature = "help")]
-            fn help<W: embedded_io::Write<Error = E>, E: embedded_io::Error>(
-                request: embedded_cli::help::HelpRequest<'_>,
+            fn command_count() -> usize {
+                <$from_ty>::command_count()
+            }
+
+            #[cfg(feature = "help")]
+            fn list_commands<W: embedded_io::Write<Error = E>, E: embedded_io::Error>(
+                writer: &mut embedded_cli::writer::Writer<'_, W, E>,
+            ) -> Result<(), E> {
+                <$from_ty>::list_commands(writer)
+            }
+
+            #[cfg(feature = "help")]
+            fn command_help<
+                W: embedded_io::Write<Error = E>,
+                E: embedded_io::Error,
+                F: FnMut(&mut embedded_cli::writer::Writer<'_, W, E>) -> Result<(), E>,
+            >(
+                parent: &mut F,
+                command: embedded_cli::command::RawCommand<'_>,
                 writer: &mut embedded_cli::writer::Writer<'_, W, E>,
             ) -> Result<(), embedded_cli::service::HelpError<E>> {
-                <$from_ty>::help(request, writer)
+                <$from_ty>::command_help(parent, command, writer)
             }
         }
 

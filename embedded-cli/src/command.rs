@@ -41,6 +41,10 @@ impl<'a> RawCommand<'a> {
         })
     }
 
+    pub fn new(name: &'a str, args: ArgList<'a>) -> Self {
+        Self { name, args }
+    }
+
     pub fn args(&self) -> ArgList<'a> {
         self.args.clone()
     }
@@ -97,10 +101,28 @@ impl<'a> Autocomplete for RawCommand<'a> {
 
 impl<'a> Help for RawCommand<'a> {
     #[cfg(feature = "help")]
-    fn help<W: embedded_io::Write<Error = E>, E: embedded_io::Error>(
-        _: crate::help::HelpRequest<'_>,
+    fn command_count() -> usize {
+        0
+    }
+
+    #[cfg(feature = "help")]
+    fn list_commands<W: Write<Error = E>, E: embedded_io::Error>(
         _: &mut crate::writer::Writer<'_, W, E>,
-    ) -> Result<(), crate::service::HelpError<E>> {
+    ) -> Result<(), E> {
+        // noop
+        Ok(())
+    }
+
+    #[cfg(feature = "help")]
+    fn command_help<
+        W: Write<Error = E>,
+        E: embedded_io::Error,
+        F: FnMut(&mut crate::writer::Writer<'_, W, E>) -> Result<(), E>,
+    >(
+        _: &mut F,
+        _: RawCommand<'_>,
+        _: &mut crate::writer::Writer<'_, W, E>,
+    ) -> Result<(), HelpError<E>> {
         // noop
         Err(HelpError::UnknownCommand)
     }

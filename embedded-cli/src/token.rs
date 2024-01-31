@@ -75,6 +75,13 @@ impl<'a> Tokens<'a> {
         Self { empty, tokens }
     }
 
+    pub fn from_raw(tokens: &'a str, is_empty: bool) -> Self {
+        Self {
+            empty: is_empty,
+            tokens,
+        }
+    }
+
     /// Returns raw representation of tokens (delimited with 0)
     pub fn into_raw(self) -> &'a str {
         self.tokens

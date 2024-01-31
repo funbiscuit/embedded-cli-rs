@@ -339,12 +339,12 @@ where
         tokens: Tokens<'_>,
         handler: &mut P,
     ) -> Result<(), E> {
-        #[cfg(feature = "help")]
-        if let Some(request) = HelpRequest::from_tokens(&tokens) {
-            self.process_help::<C>(request)?;
-        }
-
         if let Some(command) = RawCommand::from_tokens(&tokens) {
+            #[cfg(feature = "help")]
+            if let Some(request) = HelpRequest::from_command(&command) {
+                return self.process_help::<C>(request);
+            }
+
             self.process_command(command, handler)?;
         };
 
@@ -360,13 +360,21 @@ where
     #[cfg(feature = "help")]
     fn process_help<C: Help>(&mut self, request: HelpRequest<'_>) -> Result<(), E> {
         let mut writer = Writer::new(&mut self.writer);
-        let err = C::help(request.clone(), &mut writer);
 
-        if let (Err(HelpError::UnknownCommand), HelpRequest::Command(command)) = (err, request) {
-            writer.write_str("error: unrecognized command '")?;
-            writer.write_str(command)?;
-            writer.write_str("'")?;
-        }
+        match request {
+            HelpRequest::All => C::list_commands(&mut writer)?,
+            HelpRequest::Command(command) => {
+                match C::command_help(&mut |_| Ok(()), command.clone(), &mut writer) {
+                    Err(HelpError::UnknownCommand) => {
+                        writer.write_str("error: unrecognized command '")?;
+                        writer.write_str(command.name())?;
+                        writer.write_str("'")?;
+                    }
+                    Err(HelpError::WriteError(err)) => return Err(err),
+                    Ok(()) => {}
+                }
+            }
+        };
 
         if writer.is_dirty() {
             self.writer.write_str(codes::CRLF)?;

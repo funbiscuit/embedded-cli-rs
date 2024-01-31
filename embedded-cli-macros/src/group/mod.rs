@@ -3,9 +3,6 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput};
 
-#[cfg(feature = "help")]
-use quote::format_ident;
-
 use crate::{processor, utils::TargetType};
 
 use self::command_group::CommandGroup;
@@ -58,8 +55,9 @@ fn derive_autocomplete(target: &TargetType, groups: &[CommandGroup]) -> TokenStr
 
     let groups = groups
         .iter()
+        .filter(|group| !group.hidden)
         .map(|group| {
-            let ty = group.field_type();
+            let ty = &group.field_type;
             quote! {
                 <#ty as _cli::service::Autocomplete>::autocomplete(request.clone(), autocompletion);
             }
@@ -94,39 +92,85 @@ fn derive_help(target: &TargetType, groups: &[CommandGroup]) -> TokenStream {
     let ident = target.ident();
     let named_lifetime = target.named_lifetime();
 
-    let groups = groups
+    let command_counts = groups
         .iter()
+        .filter(|group| !group.hidden)
         .enumerate()
         .map(|(i, group)| {
-            let ty = group.field_type();
-            let res = format_ident!("res{}", i);
-            quote! {
-                let #res = <#ty as _cli::service::Help>::help(request.clone(), writer);
+            let ty = &group.field_type;
+            if i > 0 {
+                quote! {
+                    + <#ty as _cli::service::Help>::command_count()
+                }
+            } else {
+                quote! {
+                    <#ty as _cli::service::Help>::command_count()
+                }
             }
         })
         .collect::<Vec<_>>();
 
-    let or_res = groups
+    let command_help = groups
         .iter()
+        .filter(|group| !group.hidden)
         .enumerate()
-        .skip(1)
-        .map(|(i, _)| {
-            let res = format_ident!("res{}", i);
+        .map(|(i, group)| {
+            let ty = &group.field_type;
+            if i > 0 {
+                quote! {
+                    .or_else(|_| <#ty as _cli::service::Help>::command_help(parent, command.clone(), writer))
+                }
+            } else {
+                quote! {
+                    <#ty as _cli::service::Help>::command_help(parent, command.clone(), writer)
+                }
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let list_commands = groups
+        .iter()
+        .filter(|group| !group.hidden)
+        .map(|group| {
+            let ty = &group.field_type;
             quote! {
-                .or(#res)
+                if <#ty as _cli::service::Help>::command_count() > 0 {
+                    if has_output {
+                        writer.writeln_str("")?;
+                    }
+                    <#ty as _cli::service::Help>::list_commands(writer)?;
+                    has_output = true;
+                }
             }
         })
         .collect::<Vec<_>>();
 
     quote! {
         impl #named_lifetime _cli::service::Help for #ident #named_lifetime {
-            fn help<W: _io::Write<Error = E>, E: _io::Error>(
-                request: _cli::help::HelpRequest<'_>,
+
+            fn command_count() -> usize {
+                #(#command_counts)*
+            }
+
+            fn list_commands<W: _io::Write<Error = E>, E: _io::Error>(
+                writer: &mut _cli::writer::Writer<'_, W, E>,
+            ) -> Result<(), E> {
+                let mut has_output = false;
+                #(#list_commands)*
+                Ok(())
+            }
+
+            fn command_help<
+                W: _io::Write<Error = E>,
+                E: _io::Error,
+                F: FnMut(&mut _cli::writer::Writer<'_, W, E>) -> Result<(), E>,
+            >(
+                parent: &mut F,
+                command: _cli::command::RawCommand<'_>,
                 writer: &mut _cli::writer::Writer<'_, W, E>,
             ) -> Result<(), _cli::service::HelpError<E>> {
-                #(#groups)*
-
-                res0 #(#or_res)*
+                #(#command_help)*?;
+                Ok(())
             }
         }
     }
@@ -150,8 +194,8 @@ fn derive_from_raw(target: &TargetType, groups: &[CommandGroup]) -> TokenStream 
     let groups = groups
         .iter()
         .map(|group| {
-            let ident = group.ident();
-            let ty = group.field_type();
+            let ident = &group.ident;
+            let ty = &group.field_type;
             quote! {
                 match <#ty as _cli::service::FromRaw>::parse(raw.clone()) {
                     Ok(cmd) => {
