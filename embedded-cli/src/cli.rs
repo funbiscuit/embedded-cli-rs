@@ -11,7 +11,7 @@ use crate::{
     command::RawCommand,
     editor::Editor,
     input::{ControlInput, Input, InputGenerator},
-    service::{Autocomplete, CommandProcessor, Help, ProcessError},
+    service::{Autocomplete, CommandProcessor, Help, ParseError, ProcessError},
     token::Tokens,
     writer::{WriteExt, Writer},
 };
@@ -326,11 +326,11 @@ where
         }
         self.writer.flush()?;
 
-        if let Err(e) = res {
-            self.process_error(e)?;
+        match res {
+            Err(ProcessError::ParseError(err)) => self.process_error(err),
+            Err(ProcessError::WriteError(err)) => Err(err),
+            Ok(()) => Ok(()),
         }
-
-        Ok(())
     }
 
     #[allow(clippy::extra_unused_type_parameters)]
@@ -351,10 +351,44 @@ where
         Ok(())
     }
 
-    fn process_error(&mut self, _error: ProcessError<'_, E>) -> Result<(), E> {
-        //TODO: proper handling
-        self.writer
-            .flush_str("Error occured during command processing\r\n")
+    fn process_error(&mut self, error: ParseError<'_>) -> Result<(), E> {
+        self.writer.write_str("error: ")?;
+        match error {
+            ParseError::MissingRequiredArgument { name } => {
+                self.writer.write_str("missing required argument: ")?;
+                self.writer.write_str(name)?;
+            }
+            ParseError::NonAsciiShortOption => {
+                self.writer
+                    .write_str("non-ascii in short options is not supported")?;
+            }
+            ParseError::ParseValueError { value, expected } => {
+                self.writer.write_str("failed to parse '")?;
+                self.writer.write_str(value)?;
+                self.writer.write_str("', expected ")?;
+                self.writer.write_str(expected)?;
+            }
+            ParseError::UnexpectedArgument { value } => {
+                self.writer.write_str("unexpected argument: ")?;
+                self.writer.write_str(value)?;
+            }
+            ParseError::UnexpectedLongOption { name } => {
+                self.writer.write_str("unexpected option: -")?;
+                self.writer.write_str("-")?;
+                self.writer.write_str(name)?;
+            }
+            ParseError::UnexpectedShortOption { name } => {
+                // short options are guaranteed to be ascii alphabetic
+                if name.is_ascii_alphabetic() {
+                    self.writer.write_str("unexpected option: -")?;
+                    self.writer.write_bytes(&[name as u8])?;
+                }
+            }
+            ParseError::UnknownCommand => {
+                self.writer.write_str("unknown command")?;
+            }
+        }
+        self.writer.flush_str(codes::CRLF)
     }
 
     #[cfg(feature = "help")]
@@ -366,9 +400,8 @@ where
             HelpRequest::Command(command) => {
                 match C::command_help(&mut |_| Ok(()), command.clone(), &mut writer) {
                     Err(HelpError::UnknownCommand) => {
-                        writer.write_str("error: unrecognized command '")?;
-                        writer.write_str(command.name())?;
-                        writer.write_str("'")?;
+                        writer.write_str("error: ")?;
+                        writer.write_str("unknown command")?;
                     }
                     Err(HelpError::WriteError(err)) => return Err(err),
                     Ok(()) => {}

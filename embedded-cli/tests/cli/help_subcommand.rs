@@ -249,7 +249,7 @@ impl<'a> From<CliBase2Sub<'a>> for Base2Sub {
 #[case("base1 --help", &[
     "Base command",
     "",
-    "Usage: base1 [OPTIONS] COMMAND",
+    "Usage: base1 [OPTIONS] <COMMAND>",
     "",
     "Options:",
     "  -n, --name [NAME]  Optional argument",
@@ -263,7 +263,7 @@ impl<'a> From<CliBase2Sub<'a>> for Base2Sub {
 #[case("base1 get --help", &[
     "Get something",
     "", 
-    "Usage: base1 get [OPTIONS] COMMAND",
+    "Usage: base1 get [OPTIONS] <COMMAND>",
     "",
     "Options:",
     "  -i, --item [ITEM]  Optional item",
@@ -277,7 +277,7 @@ impl<'a> From<CliBase2Sub<'a>> for Base2Sub {
 #[case("base1 --name some -v get --help", &[
     "Get something",
     "", 
-    "Usage: base1 get [OPTIONS] COMMAND",
+    "Usage: base1 get [OPTIONS] <COMMAND>",
     "",
     "Options:",
     "  -i, --item [ITEM]  Optional item",
@@ -340,7 +340,7 @@ impl<'a> From<CliBase2Sub<'a>> for Base2Sub {
 #[case("base2 --help", &[
     "Another base command",
     "",
-    "Usage: base2 [OPTIONS] COMMAND",
+    "Usage: base2 [OPTIONS] <COMMAND>",
     "",
     "Options:",
     "  -l, --level <LEVEL>  Some level",

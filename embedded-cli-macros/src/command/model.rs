@@ -191,12 +191,42 @@ impl CommandArg {
         &self.arg_type
     }
 
+    pub fn full_name(&self) -> String {
+        match &self.arg_type {
+            CommandArgType::Flag { long, short } | CommandArgType::Option { long, short } => {
+                let prefix = long
+                    .as_ref()
+                    .map(|name| format!("--{}", name))
+                    .or(short.map(|n| format!("-{}", n)))
+                    .unwrap();
+                if self.is_optional() {
+                    format!("{} [{}]", prefix, self.name().to_uppercase())
+                } else {
+                    format!("{} <{}>", prefix, self.name().to_uppercase())
+                }
+            }
+            CommandArgType::Positional => {
+                if self.is_optional() {
+                    format!("[{}]", self.name().to_uppercase())
+                } else {
+                    format!("<{}>", self.name().to_uppercase())
+                }
+            }
+            CommandArgType::SubCommand => {
+                if self.is_optional() {
+                    "[COMMAND]".to_string()
+                } else {
+                    "<COMMAND>".to_string()
+                }
+            }
+        }
+    }
+
     #[cfg(feature = "help")]
     pub fn help(&self) -> &Help {
         &self.help
     }
 
-    #[cfg(feature = "help")]
     pub fn is_optional(&self) -> bool {
         self.ty == ArgType::Option
     }

@@ -1,6 +1,6 @@
 use embedded_io::Write;
 
-use crate::{cli::CliHandle, command::RawCommand};
+use crate::{arguments::FromArgumentError, cli::CliHandle, command::RawCommand};
 
 #[cfg(feature = "autocomplete")]
 use crate::autocomplete::{Autocompletion, Request};
@@ -15,14 +15,42 @@ pub enum ProcessError<'a, E: embedded_io::Error> {
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ParseError<'a> {
-    NotEnoughArguments,
-    Other(&'a str),
-    ParseArgumentError { value: &'a str },
-    TooManyArguments { expected: usize },
-    UnknownFlag { flag: char },
-    UnknownOption { name: &'a str },
+    MissingRequiredArgument {
+        /// Name of the argument. For example `<FILE>`, `-f <FILE>`, `--file <FILE>`
+        name: &'a str,
+    },
+
+    NonAsciiShortOption,
+
+    ParseValueError {
+        value: &'a str,
+        expected: &'static str,
+    },
+
+    UnexpectedArgument {
+        value: &'a str,
+    },
+
+    UnexpectedLongOption {
+        name: &'a str,
+    },
+
+    UnexpectedShortOption {
+        name: char,
+    },
+
     UnknownCommand,
+}
+
+impl<'a> From<FromArgumentError<'a>> for ParseError<'a> {
+    fn from(error: FromArgumentError<'a>) -> Self {
+        Self::ParseValueError {
+            value: error.value,
+            expected: error.expected,
+        }
+    }
 }
 
 impl<'a, E: embedded_io::Error> From<E> for ProcessError<'a, E> {

@@ -143,7 +143,6 @@ fn create_arg_parsing(args: &[CommandArg]) -> (TokenStream, Vec<TokenStream>) {
             }
         }
 
-        //TODO: correct errors
         let constructor_arg = match arg.ty() {
             ArgType::Option => quote! { #fi_raw: #fi },
             ArgType::Normal => {
@@ -152,8 +151,11 @@ fn create_arg_parsing(args: &[CommandArg]) -> (TokenStream, Vec<TokenStream>) {
                         #fi_raw: #fi.unwrap_or(#default)
                     }
                 } else {
+                    let name = arg.full_name();
                     quote! {
-                        #fi_raw: #fi.ok_or(_cli::service::ParseError::NotEnoughArguments)?
+                        #fi_raw: #fi.ok_or(_cli::service::ParseError::MissingRequiredArgument {
+                            name: #name,
+                        })?
                     }
                 }
             }
@@ -175,9 +177,9 @@ fn create_arg_parsing(args: &[CommandArg]) -> (TokenStream, Vec<TokenStream>) {
         }
     } else if positional_value_arms.is_empty() {
         quote! {
-            _cli::arguments::Arg::Value(_) if state == States::Normal =>
-            return Err(_cli::service::ParseError::TooManyArguments{
-                expected: positional
+            _cli::arguments::Arg::Value(value) if state == States::Normal =>
+            return Err(_cli::service::ParseError::UnexpectedArgument {
+                value,
             })
         }
     } else {
@@ -185,8 +187,8 @@ fn create_arg_parsing(args: &[CommandArg]) -> (TokenStream, Vec<TokenStream>) {
             _cli::arguments::Arg::Value(val) if state == States::Normal => {
                 match positional {
                     #(#positional_value_arms)*
-                    _ => return Err(_cli::service::ParseError::TooManyArguments{
-                        expected: positional
+                    _ => return Err(_cli::service::ParseError::UnexpectedArgument{
+                        value: val
                     })
                 }
                 positional += 1;
@@ -207,17 +209,19 @@ fn create_arg_parsing(args: &[CommandArg]) -> (TokenStream, Vec<TokenStream>) {
 
         let mut args = command.args().args();
         while let Some(arg) = args.next() {
-            let arg = arg.map_err(|_| _cli::service::ParseError::Other(""))?;
+            let arg = arg.map_err(|err| match err {
+                _cli::arguments::ArgError::NonAsciiShortOption => _cli::service::ParseError::NonAsciiShortOption
+            })?;
             match arg {
                 #(#option_name_arms)*
                 #(#option_value_arms)*
                 #value_arm,
                 _cli::arguments::Arg::Value(_) => unreachable!(),
                 _cli::arguments::Arg::LongOption(option) => {
-                    return Err(_cli::service::ParseError::UnknownOption { name: option })
+                    return Err(_cli::service::ParseError::UnexpectedLongOption { name: option })
                 }
                 _cli::arguments::Arg::ShortOption(option) => {
-                    return Err(_cli::service::ParseError::UnknownFlag { flag: option })
+                    return Err(_cli::service::ParseError::UnexpectedShortOption { name: option })
                 }
                 _cli::arguments::Arg::DoubleDash => {}
             }
@@ -255,8 +259,6 @@ pub fn create_option_name_arm(
 
 fn create_parse_arg_value(ty: &TokenStream) -> TokenStream {
     quote! {
-        <#ty as _cli::arguments::FromArgument>::from_arg(val).map_err(|_|
-            _cli::service::ParseError::ParseArgumentError { value: val }
-        )?,
+        <#ty as _cli::arguments::FromArgument>::from_arg(val)?,
     }
 }

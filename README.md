@@ -27,6 +27,7 @@ for now. If you have suggestions - open an Issue or a Pull Request.
 - [x] Configurable memory usage
 - [x] Declaration of commands with enums
 - [x] Options and flags support
+- [x] Subcommand support
 - [x] Left/right support (move inside current input)
 - [x] Parsing of arguments to common types
 - [x] Autocompletion of command names (with tab)
@@ -331,14 +332,14 @@ Memory usage might change in future versions, but I'll try to keep this table up
 
 | Features                        | ROM, bytes | Static RAM, bytes |
 |---------------------------------|:----------:|:-----------------:|
-|                                 |    8588    |        161        |
-| `autocomplete`                  |   10340    |        181        |
-| `history`                       |   10686    |        193        |
-| `autocomplete` `history`        |   12152    |        213        |
-| `help`                          |   11336    |        552        |
-| `autocomplete` `help`           |   13168    |        568        |
-| `history` `help`                |   13732    |        584        |
-| `autocomplete` `history` `help` |   14930    |        600        |
+|                                 |   10328    |        293        |
+| `autocomplete`                  |   12034    |        313        |
+| `history`                       |   12288    |        325        |
+| `autocomplete` `history`        |   14026    |        345        |
+| `help`                          |   13122    |        632        |
+| `autocomplete` `help`           |   14742    |        648        |
+| `history` `help`                |   15170    |        664        |
+| `autocomplete` `history` `help` |   16570    |        680        |
 
 This table is generated using this [script](examples/arduino/memory.sh).
 As table shows, enabling help adds quite a lot to memory usage since help usually requires a lot of text to be stored.

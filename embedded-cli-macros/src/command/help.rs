@@ -209,8 +209,7 @@ fn create_command_help(command: &Command) -> TokenStream {
                         #(#option_value_arms)*
                         #value_arm,
                         _cli::arguments::Arg::Value(_) => unreachable!(),
-                        _cli::arguments::Arg::LongOption(_) => {}
-                        _cli::arguments::Arg::ShortOption(_) => {}
+                        _cli::arguments::Arg::LongOption(_) | _cli::arguments::Arg::ShortOption(_) => break,
                         _cli::arguments::Arg::DoubleDash => {}
                     }
                 }
@@ -372,12 +371,18 @@ fn create_usage(name: &str, args: &CommandArgs) -> TokenStream {
         }
         CommandArgs::Named(args) => {
             has_options = args.iter().any(|arg| arg.arg_type().is_option());
-            let has_subcommand = args.iter().any(|arg| arg.arg_type().is_subcommand());
+            let subcommand = args.iter().find(|arg| arg.arg_type().is_subcommand());
 
-            if has_subcommand {
-                usage_args = vec![quote! {
-                    writer.write_str(" COMMAND")?;
-                }]
+            if let Some(subcommand) = subcommand {
+                if subcommand.is_optional() {
+                    usage_args = vec![quote! {
+                        writer.write_str(" [COMMAND]")?;
+                    }]
+                } else {
+                    usage_args = vec![quote! {
+                        writer.write_str(" <COMMAND>")?;
+                    }]
+                }
             } else {
                 usage_args = args
                     .iter()

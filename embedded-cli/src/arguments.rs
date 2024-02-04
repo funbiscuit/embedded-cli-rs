@@ -137,14 +137,20 @@ impl<'a> Iterator for ArgsIter<'a> {
     }
 }
 
+#[derive(Debug)]
+pub struct FromArgumentError<'a> {
+    pub value: &'a str,
+    pub expected: &'static str,
+}
+
 pub trait FromArgument<'a> {
-    fn from_arg(arg: &'a str) -> Result<Self, &'static str>
+    fn from_arg(arg: &'a str) -> Result<Self, FromArgumentError<'_>>
     where
         Self: Sized;
 }
 
 impl<'a> FromArgument<'a> for &'a str {
-    fn from_arg(arg: &'a str) -> Result<Self, &'static str> {
+    fn from_arg(arg: &'a str) -> Result<Self, FromArgumentError<'_>> {
         Ok(arg)
     }
 }
@@ -152,8 +158,11 @@ impl<'a> FromArgument<'a> for &'a str {
 macro_rules! impl_arg_fromstr {
     ($id:ident) => (
         impl<'a> FromArgument<'a> for $id {
-            fn from_arg(arg: &'a str) -> Result<Self, &'static str> {
-                arg.parse().map_err(|_| "invalid value")
+            fn from_arg(arg: &'a str) -> Result<Self, FromArgumentError<'_>> {
+                arg.parse().map_err(|_| FromArgumentError {
+                    value: arg,
+                    expected: stringify!($id),
+                })
             }
         }
     );

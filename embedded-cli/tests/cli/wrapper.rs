@@ -125,31 +125,41 @@ impl<T> Default for State<T> {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ParseError {
-    NotEnoughArguments,
-    Other(String),
-    ParseArgumentError { value: String },
-    TooManyArguments { expected: usize },
-    UnknownOption { name: String },
-    UnknownFlag { flag: char },
+    MissingRequiredArgument { name: String },
+
+    ParseValueError { value: String, expected: String },
+
+    UnexpectedArgument { value: String },
+
+    UnexpectedLongOption { name: String },
+
+    UnexpectedShortOption { name: char },
+
     UnknownCommand,
+    Other,
 }
 
 impl<'a> From<CliParseError<'a>> for ParseError {
     fn from(value: CliParseError<'a>) -> Self {
         match value {
-            CliParseError::NotEnoughArguments => ParseError::NotEnoughArguments,
-            CliParseError::Other(s) => ParseError::Other(s.to_string()),
-            CliParseError::ParseArgumentError { value } => ParseError::ParseArgumentError {
-                value: value.to_string(),
-            },
-            CliParseError::TooManyArguments { expected } => {
-                ParseError::TooManyArguments { expected }
+            CliParseError::MissingRequiredArgument { name } => {
+                Self::MissingRequiredArgument { name: name.into() }
             }
-            CliParseError::UnknownOption { name } => ParseError::UnknownOption {
-                name: name.to_string(),
+            CliParseError::ParseValueError { value, expected } => Self::ParseValueError {
+                value: value.into(),
+                expected: expected.into(),
             },
-            CliParseError::UnknownFlag { flag } => ParseError::UnknownFlag { flag },
-            CliParseError::UnknownCommand => ParseError::UnknownCommand,
+            CliParseError::UnexpectedArgument { value } => Self::UnexpectedArgument {
+                value: value.into(),
+            },
+            CliParseError::UnexpectedLongOption { name } => {
+                Self::UnexpectedLongOption { name: name.into() }
+            }
+            CliParseError::UnexpectedShortOption { name } => {
+                Self::UnexpectedShortOption { name: name.into() }
+            }
+            CliParseError::UnknownCommand => Self::UnknownCommand,
+            _ => Self::Other,
         }
     }
 }
