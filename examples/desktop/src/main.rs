@@ -1,10 +1,8 @@
 #![warn(rust_2018_idioms)]
 
-use embedded_cli::arguments::Arg;
 use embedded_cli::cli::{CliBuilder, CliHandle};
 use embedded_cli::codes;
-use embedded_cli::command::RawCommand;
-use embedded_cli::{Command, CommandGroup};
+use embedded_cli::Command;
 use embedded_io::{ErrorType, Write};
 use std::convert::Infallible;
 use std::io::{stdin, stdout, Stdout, Write as _};
@@ -15,52 +13,61 @@ use termion::raw::{IntoRawMode, RawTerminal};
 use ufmt::{uwrite, uwriteln};
 
 #[derive(Debug, Command)]
-enum Base<'a> {
-    /// Say hello to World or someone else
-    Hello {
-        /// To whom to say hello (World by default)
-        name: Option<&'a str>,
+enum BaseCommand<'a> {
+    /// Control LEDs
+    Led {
+        /// LED id
+        #[arg(long)]
+        id: u8,
 
-        /// Print extra info
-        #[arg(short = 'V', long)]
-        verbose: bool,
+        #[command(subcommand)]
+        command: LedCommand,
     },
+
+    /// Control ADC
+    Adc {
+        /// ADC id
+        #[arg(long)]
+        id: u8,
+
+        #[command(subcommand)]
+        command: AdcCommand<'a>,
+    },
+
+    /// Show some status
+    Status,
 
     /// Stop CLI and exit
     Exit,
 }
 
 #[derive(Debug, Command)]
-#[command(help_title = "Manage Hardware")]
-enum GetCommand {
-    // By default command name is generated from variant name,
-    // converting it to kebab case (get-led in this case)
+enum LedCommand {
     /// Get current LED value
-    GetLed {
-        /// ID of requested LED
-        #[arg(long)]
-        led: u8,
-    },
+    Get,
 
-    // Name can be specified explicitly
-    /// Get current ADC value
-    #[command(name = "getAdc")]
-    GetAdc {
-        /// ID of requested ADC
-        #[arg(long)]
-        adc: u8,
+    /// Set LED value
+    Set {
+        /// LED brightness
+        value: u8,
+    },
+}
+
+#[derive(Debug, Command)]
+enum AdcCommand<'a> {
+    /// Read ADC value
+    Read {
+        /// Print extra info
+        #[arg(short = 'V', long)]
+        verbose: bool,
 
         /// Sample count (16 by default)
         #[arg(long)]
         samples: Option<u8>,
-    },
-}
 
-#[derive(Debug, CommandGroup)]
-enum Group<'a> {
-    Base(Base<'a>),
-    Get(GetCommand),
-    Other(RawCommand<'a>),
+        #[arg(long)]
+        sampler: &'a str,
+    },
 }
 
 pub struct Writer {
@@ -84,86 +91,78 @@ impl Write for Writer {
 }
 
 struct AppState {
+    led_brightness: [u8; 4],
     num_commands: usize,
     should_exit: bool,
 }
 
-fn on_get(
+fn on_led(
     cli: &mut CliHandle<'_, Writer, Infallible>,
     state: &mut AppState,
-    command: GetCommand,
+    id: u8,
+    command: LedCommand,
+) -> Result<(), Infallible> {
+    state.num_commands += 1;
+
+    if id as usize > state.led_brightness.len() {
+        uwrite!(cli.writer(), "LED{} not found", id)?;
+    } else {
+        match command {
+            LedCommand::Get => {
+                uwrite!(
+                    cli.writer(),
+                    "Current LED{} brightness: {}",
+                    id,
+                    state.led_brightness[id as usize]
+                )?;
+            }
+            LedCommand::Set { value } => {
+                state.led_brightness[id as usize] = value;
+                uwrite!(cli.writer(), "Setting LED{} brightness to {}", id, value)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn on_adc(
+    cli: &mut CliHandle<'_, Writer, Infallible>,
+    state: &mut AppState,
+    id: u8,
+    command: AdcCommand<'_>,
 ) -> Result<(), Infallible> {
     state.num_commands += 1;
 
     match command {
-        GetCommand::GetLed { led } => {
+        AdcCommand::Read {
+            verbose,
+            samples,
+            sampler,
+        } => {
+            let samples = samples.unwrap_or(16);
+            if verbose {
+                cli.writer().write_str("Performing sampling with ")?;
+                cli.writer().write_str(sampler)?;
+                uwriteln!(cli.writer(), "\nUsing {} samples", samples)?;
+            }
             uwrite!(
                 cli.writer(),
-                "Current LED{} brightness: {}",
-                led,
+                "Current ADC{} readings: {}",
+                id,
                 rand::random::<u8>()
             )?;
         }
-        GetCommand::GetAdc { adc, samples } => {
-            let samples = samples.unwrap_or(16);
-            uwrite!(
-                cli.writer(),
-                "Current ADC{} readings: {}. Used {} samples",
-                adc,
-                rand::random::<u8>(),
-                samples
-            )?;
-        }
     }
     Ok(())
 }
 
-fn on_command(
+fn on_status(
     cli: &mut CliHandle<'_, Writer, Infallible>,
     state: &mut AppState,
-    command: Base<'_>,
 ) -> Result<(), Infallible> {
     state.num_commands += 1;
-
-    match command {
-        Base::Hello { name, verbose } => {
-            if verbose {
-                cli.writer().writeln_str("Checking name")?;
-                if name.is_none() {
-                    cli.writer().writeln_str("Name not found")?;
-                } else {
-                    cli.writer().writeln_str("Name given")?;
-                }
-            }
-            uwrite!(cli.writer(), "Hello, {}", name.unwrap_or("World"))?;
-        }
-        Base::Exit => {
-            cli.writer().write_str("Cli will shutdown now")?;
-            state.should_exit = true;
-        }
-    }
-    Ok(())
-}
-
-fn on_unknown(
-    cli: &mut CliHandle<'_, Writer, Infallible>,
-    state: &mut AppState,
-    command: RawCommand<'_>,
-) -> Result<(), Infallible> {
-    state.num_commands += 1;
-    cli.writer().writeln_str("Received:")?;
-    uwriteln!(cli.writer(), "Command: {}", command.name())?;
-
-    for arg in command.args().args().flatten() {
-        match arg {
-            Arg::DoubleDash => cli.writer().writeln_str("--")?,
-            Arg::LongOption(name) => uwriteln!(cli.writer(), "Long option: {}", name)?,
-            Arg::ShortOption(name) => uwriteln!(cli.writer(), "Short option: {}", name)?,
-            Arg::Value(value) => uwriteln!(cli.writer(), "Value: {}", value)?,
-        }
-    }
-
-    uwriteln!(cli.writer(), "Total received: {}", state.num_commands)?;
+    uwriteln!(cli.writer(), "Received: {}", state.num_commands)?;
     Ok(())
 }
 
@@ -176,14 +175,20 @@ fn main() {
 
     // Create global state, that will be used for entire application
     let mut state = AppState {
+        led_brightness: rand::random(),
         num_commands: 0,
         should_exit: false,
     };
 
     cli.write(|writer| {
-        writer.writeln_str("Cli is running. Press 'Esc' to exit")?;
-        writer.writeln_str(r#"Type "help" for a list of commands"#)?;
-        writer.writeln_str("Use backspace and tab to remove chars and autocomplete")?;
+        uwrite!(
+            writer,
+            "Cli is running. Press 'Esc' to exit
+Type \"help\" for a list of commands.
+Use backspace and tab to remove chars and autocomplete.
+Use up and down for history navigation.
+Use left and right to move inside input."
+        )?;
         Ok(())
     })
     .unwrap();
@@ -211,15 +216,16 @@ fn main() {
         // we can use different command and processor with each call
         // TODO: add example of login that uses different states
         for byte in bytes {
-            cli.process_byte::<Group<'_>, _>(
+            cli.process_byte::<BaseCommand<'_>, _>(
                 byte,
-                &mut Group::processor(|cli, command| {
-                    match command {
-                        Group::Base(cmd) => on_command(cli, &mut state, cmd)?,
-                        Group::Get(cmd) => on_get(cli, &mut state, cmd)?,
-                        Group::Other(cmd) => on_unknown(cli, &mut state, cmd)?,
+                &mut BaseCommand::processor(|cli, command| match command {
+                    BaseCommand::Led { id, command } => on_led(cli, &mut state, id, command),
+                    BaseCommand::Adc { id, command } => on_adc(cli, &mut state, id, command),
+                    BaseCommand::Status => on_status(cli, &mut state),
+                    BaseCommand::Exit => {
+                        state.should_exit = true;
+                        cli.writer().write_str("Cli will shutdown now")
                     }
-                    Ok(())
                 }),
             )
             .unwrap();

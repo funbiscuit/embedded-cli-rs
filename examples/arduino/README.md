@@ -2,7 +2,7 @@
 
 This example shows how to build cli with Arduino Nano.
 Another Arduino can also be used, but you will have to tweak configs.
-Example uses ~15KiB of ROM and ~0.6KiB of static RAM.
+Example uses ~16KiB of ROM and ~0.6KiB of static RAM.
 Most of RAM is taken by derived implementations for help and autocomplete
 that don't use progmem. In future this should be fixed.
 

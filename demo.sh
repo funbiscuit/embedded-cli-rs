@@ -60,9 +60,6 @@ sleep 5
 type "help"
 submit
 
-type "h"
-tab
-
 type "l"
 tab
 
@@ -77,7 +74,41 @@ submit
 
 up 2
 
-type "Rust"
+type "--id 1 get"
+submit
+
+up
+backspace 3
+type "set"
+submit
+
+up
+type " --help"
+submit
+
+up 2
+type " 12"
+submit
+
+type "l"
+tab
+type "--id 1 get"
+submit
+
+
+type "a"
+tab
+type "-h"
+submit
+
+up
+left 2
+type "--id 1 read "
+submit
+
+up
+backspace 2
+type "--sampler mean"
 submit
 
 up
@@ -85,67 +116,15 @@ type " -V"
 submit
 
 up
-backspace
-type "-verbose"
-submit
-
-type "hello -- --Rust--"
-submit
-
-type "got-l"
-left 5
-type "help "
-right 2
-backspace
-type "e"
-right 3
-type "ed"
-submit
-
-type "g"
-tab
-
-type "-"
-tab
-
-type "--led 12"
-submit
-
-up 2
-down
-backspace
-type "3"
-submit
-
-type "test"
+left 3
+type " val"
 submit
 
 up
-type " 123 789"
-submit
-
-up
-backspace 3
-type "456"
-left 4
-backspace 2
-left
-type "--id "
-right
-type "01"
-submit
-
-type "test \"101 456\""
-submit
-
-up
-left 4
-backspace 4
-type "\\\"abc\\\" "
-submit
-
-up
-type " -- --arg"
+left 11
+type "\""
+right 8
+type "\""
 submit
 
 # Wait until keys disappear

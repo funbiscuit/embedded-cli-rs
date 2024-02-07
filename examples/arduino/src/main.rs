@@ -11,11 +11,9 @@ use arduino_hal::port::Pin;
 use arduino_hal::prelude::_void_ResultVoidExt;
 use arduino_hal::usart::UsartWriter;
 use avr_progmem::progmem_str as F;
-use embedded_cli::arguments::Arg;
 use embedded_cli::cli::CliBuilder;
 use embedded_cli::cli::CliHandle;
-use embedded_cli::command::RawCommand;
-use embedded_cli::{Command, CommandGroup};
+use embedded_cli::Command;
 use embedded_hal::serial::Read;
 use embedded_hal::serial::Write;
 use embedded_io::ErrorType;
@@ -24,52 +22,58 @@ use ufmt::uwrite;
 use ufmt::uwriteln;
 
 #[derive(Debug, Command)]
-enum Base<'a> {
-    /// Say hello to World or someone else
-    Hello {
-        /// To whom to say hello (World by default)
-        name: Option<&'a str>,
+enum BaseCommand<'a> {
+    /// Control LEDs
+    Led {
+        /// LED id
+        #[arg(long)]
+        id: u8,
 
-        /// Print extra info
-        #[arg(short = 'V', long)]
-        verbose: bool,
+        #[command(subcommand)]
+        command: LedCommand,
     },
 
-    /// Stop CLI and exit
-    Exit,
+    /// Control ADC
+    Adc {
+        /// ADC id
+        #[arg(long)]
+        id: u8,
+
+        #[command(subcommand)]
+        command: AdcCommand<'a>,
+    },
+
+    /// Show some status
+    Status,
 }
 
 #[derive(Debug, Command)]
-#[command(help_title = "Manage Hardware")]
-enum GetCommand {
-    // By default command name is generated from variant name,
-    // converting it to kebab case (get-led in this case)
+enum LedCommand {
     /// Get current LED value
-    GetLed {
-        /// ID of requested LED
-        #[arg(long)]
-        led: u8,
-    },
+    Get,
 
-    // Name can be specified explicitly
-    /// Get current ADC value
-    #[command(name = "getAdc")]
-    GetAdc {
-        /// ID of requested ADC
-        #[arg(long)]
-        adc: u8,
+    /// Set LED value
+    Set {
+        /// LED brightness
+        value: u8,
+    },
+}
+
+#[derive(Debug, Command)]
+enum AdcCommand<'a> {
+    /// Read ADC value
+    Read {
+        /// Print extra info
+        #[arg(short = 'V', long)]
+        verbose: bool,
 
         /// Sample count (16 by default)
         #[arg(long)]
         samples: Option<u8>,
-    },
-}
 
-#[derive(Debug, CommandGroup)]
-enum Group<'a> {
-    Base(Base<'a>),
-    Get(GetCommand),
-    Other(RawCommand<'a>),
+        #[arg(long)]
+        sampler: &'a str,
+    },
 }
 
 /// Wrapper around usart so we can impl embedded_io::Write
@@ -95,108 +99,94 @@ impl embedded_io::Write for Writer {
 }
 
 struct AppState {
+    led_brightness: [u8; 4],
     num_commands: usize,
 }
 
-fn on_get(
+fn on_led(
     cli: &mut CliHandle<'_, Writer, Infallible>,
     state: &mut AppState,
-    command: GetCommand,
+    id: u8,
+    command: LedCommand,
+) -> Result<(), Infallible> {
+    state.num_commands += 1;
+
+    if id as usize > state.led_brightness.len() {
+        uwrite!(cli.writer(), "{}{}{}", F!("LED"), id, F!(" not found"))?;
+    } else {
+        match command {
+            LedCommand::Get => {
+                uwrite!(
+                    cli.writer(),
+                    "{}{}{}{}",
+                    F!("Current LED"),
+                    id,
+                    F!(" brightness: "),
+                    state.led_brightness[id as usize]
+                )?;
+            }
+            LedCommand::Set { value } => {
+                state.led_brightness[id as usize] = value;
+                uwrite!(
+                    cli.writer(),
+                    "{}{}{}{}",
+                    F!("Setting LED"),
+                    id,
+                    F!(" brightness to "),
+                    state.led_brightness[id as usize]
+                )?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn on_adc(
+    cli: &mut CliHandle<'_, Writer, Infallible>,
+    state: &mut AppState,
+    id: u8,
+    command: AdcCommand<'_>,
 ) -> Result<(), Infallible> {
     state.num_commands += 1;
 
     match command {
-        GetCommand::GetLed { led } => {
+        AdcCommand::Read {
+            verbose,
+            samples,
+            sampler,
+        } => {
+            let samples = samples.unwrap_or(16);
+            if verbose {
+                cli.writer().write_str(F!("Performing sampling with "))?;
+                cli.writer().write_str(sampler)?;
+                uwriteln!(
+                    cli.writer(),
+                    "{}{}{}",
+                    F!("\nUsing "),
+                    samples,
+                    F!(" samples")
+                )?;
+            }
             uwrite!(
                 cli.writer(),
                 "{}{}{}{}",
-                F!("Current LED"),
-                led,
-                F!(" brightness: "),
-                12
-            )?;
-        }
-        GetCommand::GetAdc { adc, samples } => {
-            let samples = samples.unwrap_or(16);
-            uwrite!(
-                cli.writer(),
-                "{}{}{}{}{}{}{}",
                 F!("Current ADC"),
-                adc,
+                id,
                 F!(" readings: "),
-                23,
-                F!(" Used "),
-                samples,
-                F!(" samples"),
+                43
             )?;
         }
     }
     Ok(())
 }
 
-fn on_command(
+fn on_status(
     cli: &mut CliHandle<'_, Writer, Infallible>,
     state: &mut AppState,
-    command: Base<'_>,
 ) -> Result<(), Infallible> {
     state.num_commands += 1;
-
-    match command {
-        Base::Hello { name, verbose } => {
-            if verbose {
-                cli.writer().writeln_str(F!("Checking name"))?;
-                if name.is_none() {
-                    cli.writer().writeln_str(F!("Name not found"))?;
-                } else {
-                    cli.writer().writeln_str(F!("Name given"))?;
-                }
-            }
-            // last write in command callback may or may not
-            // end with newline. so both uwrite!() and uwriteln!()
-            // will give identical results
-            uwrite!(cli.writer(), "{}{}", F!("Hello, "), name.unwrap_or("World"))?;
-        }
-        Base::Exit => {
-            // We can write via normal function if formatting not needed
-            cli.writer().write_str(F!("Cli can't shutdown now"))?;
-        }
-    }
-    Ok(())
-}
-
-fn on_unknown(
-    cli: &mut CliHandle<'_, Writer, Infallible>,
-    state: &mut AppState,
-    command: RawCommand<'_>,
-) -> Result<(), Infallible> {
-    state.num_commands += 1;
-    // Use writeln to write separate lines
-    cli.writer().writeln_str(F!("Received:"))?;
-    uwriteln!(cli.writer(), "{}{}", F!("Command: "), command.name())?;
-
-    for arg in command.args().args().flatten() {
-        match arg {
-            Arg::DoubleDash => cli.writer().writeln_str("--")?,
-            Arg::LongOption(name) => {
-                cli.writer().write_str(F!("Long option: "))?;
-                cli.writer().writeln_str(name)?;
-            }
-            Arg::ShortOption(name) => {
-                uwriteln!(cli.writer(), "{}{}", F!("Short option: "), name)?;
-            }
-            Arg::Value(value) => {
-                cli.writer().write_str(F!("Value: "))?;
-                cli.writer().writeln_str(value)?;
-            }
-        }
-    }
-
-    uwriteln!(
-        cli.writer(),
-        "{}{}",
-        F!("Total received: "),
-        state.num_commands
-    )?;
+    uwriteln!(cli.writer(), "{}{}", F!("Received: "), state.num_commands)?;
     Ok(())
 }
 
@@ -221,10 +211,11 @@ fn try_run() -> Option<()> {
     led.set_low();
 
     // create static buffers for use in cli (so we're not using stack memory)
+    // History buffer is 1 byte longer so max command fits in it (it requires extra byte at end)
     // SAFETY: buffers are passed to cli and are used by cli only
     let (command_buffer, history_buffer) = unsafe {
-        static mut COMMAND_BUFFER: [u8; 32] = [0; 32];
-        static mut HISTORY_BUFFER: [u8; 32] = [0; 32];
+        static mut COMMAND_BUFFER: [u8; 40] = [0; 40];
+        static mut HISTORY_BUFFER: [u8; 41] = [0; 41];
         (COMMAND_BUFFER.as_mut(), HISTORY_BUFFER.as_mut())
     };
     let mut cli = CliBuilder::default()
@@ -235,7 +226,10 @@ fn try_run() -> Option<()> {
         .ok()?;
 
     // Create global state, that will be used for entire application
-    let mut state = AppState { num_commands: 0 };
+    let mut state = AppState {
+        led_brightness: [0; 4],
+        num_commands: 0,
+    };
 
     let _ = cli.write(|writer| {
         // storing big text in progmem
@@ -246,7 +240,8 @@ fn try_run() -> Option<()> {
             F!("Cli is running.
 Type \"help\" for a list of commands.
 Use backspace and tab to remove chars and autocomplete.
-Use up and down for history navigation")
+Use up and down for history navigation.
+Use left and right to move inside input.")
         )?;
         Ok(())
     });
@@ -260,15 +255,12 @@ Use up and down for history navigation")
         // Command type is specified for autocompletion and help
         // Processor accepts closure where we can process parsed command
         // we can use different command and processor with each call
-        let _ = cli.process_byte::<Group<'_>, _>(
+        let _ = cli.process_byte::<BaseCommand<'_>, _>(
             byte,
-            &mut Group::processor(|cli, command| {
-                match command {
-                    Group::Base(cmd) => on_command(cli, &mut state, cmd)?,
-                    Group::Get(cmd) => on_get(cli, &mut state, cmd)?,
-                    Group::Other(cmd) => on_unknown(cli, &mut state, cmd)?,
-                }
-                Ok(())
+            &mut BaseCommand::processor(|cli, command| match command {
+                BaseCommand::Led { id, command } => on_led(cli, &mut state, id, command),
+                BaseCommand::Adc { id, command } => on_adc(cli, &mut state, id, command),
+                BaseCommand::Status => on_status(cli, &mut state),
             }),
         );
     }
