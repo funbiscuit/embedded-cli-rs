@@ -42,11 +42,6 @@ impl<'a> ArgList<'a> {
     pub fn args(&self) -> ArgsIter<'a> {
         ArgsIter::new(self.tokens.iter())
     }
-
-    #[deprecated(since = "0.1.2", note = "please use `args` instead")]
-    pub fn iter(&self) -> impl Iterator<Item = &'a str> {
-        self.tokens.iter()
-    }
 }
 
 impl<'a> PartialEq for ArgList<'a> {
@@ -222,24 +217,6 @@ mod tests {
             assert_eq!(&actual, arg);
         }
         assert_eq!(iter.next(), None);
-        assert_eq!(iter.next(), None);
-    }
-
-    #[rstest]
-    #[case(r#"arg1 "arg2 long" arg3"#, &["arg1", "arg2 long", "arg3"])]
-    #[case("  ", &[])]
-    #[case(r#""""#, &[""])]
-    fn test_iter(#[case] input: &str, #[case] expected: &[&str]) {
-        let mut input = input.as_bytes().to_vec();
-        let input = core::str::from_utf8_mut(&mut input).unwrap();
-        let tokens = Tokens::new(input);
-        let args = ArgList::new(tokens);
-        #[allow(deprecated)]
-        let mut iter = args.iter();
-
-        for &arg in expected {
-            assert_eq!(iter.next(), Some(arg));
-        }
         assert_eq!(iter.next(), None);
     }
 
