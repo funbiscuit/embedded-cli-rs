@@ -1,6 +1,6 @@
 [package]
 name = "embedded-cli"
-version = "0.1.2"
+version = "0.2.0"
 authors = ["Sviatoslav Kokurin <kokurinsv@gmail.com>"]
 description = """
 CLI with autocompletion, help and history for embedded systems (like Arduino or STM32)
@@ -21,7 +21,7 @@ help = ["embedded-cli-macros/help"]
 history = []
 
 [dependencies]
-embedded-cli-macros = { version = "0.1.2", path = "../embedded-cli-macros", optional = true }
+embedded-cli-macros = { version = "0.2.0", path = "../embedded-cli-macros", optional = true }
 
 bitflags = "2.4.1"
 embedded-io = "0.6.1"
