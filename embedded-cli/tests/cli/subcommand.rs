@@ -13,20 +13,17 @@ enum CliBase<'a> {
         #[arg(short, long)]
         name: Option<&'a str>,
 
+        #[arg(short, long)]
+        level: u8,
+
         #[arg(short)]
         verbose: bool,
 
         #[command(subcommand)]
         command: CliBase1Sub<'a>,
     },
-    #[command(name = "base2")]
-    Base2 {
-        #[arg(short, long)]
-        level: u8,
-
-        #[command(subcommand)]
-        command: CliBase2Sub<'a>,
-    },
+    #[command(name = "base2", subcommand)]
+    Base2(CliBase2Sub<'a>),
 }
 
 #[derive(Debug, Clone, Command, PartialEq)]
@@ -66,15 +63,13 @@ enum Base {
     Base1 {
         name: Option<String>,
 
+        level: u8,
+
         verbose: bool,
 
         command: Base1Sub,
     },
-    Base2 {
-        level: u8,
-
-        command: Base2Sub,
-    },
+    Base2(Base2Sub),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -112,17 +107,16 @@ impl<'a> From<CliBase<'a>> for Base {
         match value {
             CliBase::Base1 {
                 name,
+                level,
                 verbose,
                 command,
             } => Self::Base1 {
                 name: name.map(|n| n.to_string()),
+                level,
                 verbose,
                 command: command.into(),
             },
-            CliBase::Base2 { level, command } => Self::Base2 {
-                level,
-                command: command.into(),
-            },
+            CliBase::Base2(command) => Self::Base2(command.into()),
         }
     }
 }
@@ -166,8 +160,9 @@ impl<'a> From<CliBase2Sub<'a>> for Base2Sub {
 }
 
 #[rstest]
-#[case("base1 --name test-name -v get --item config -v some-file", Base::Base1 {
+#[case("base1 --name test-name --level 23 -v get --item config -v some-file", Base::Base1 {
     name: Some("test-name".to_string()),
+    level: 23,
     verbose: true,
     command: Base1Sub::Get {
         item: Some("config".to_string()),
@@ -175,27 +170,26 @@ impl<'a> From<CliBase2Sub<'a>> for Base2Sub {
         file: "some-file".to_string(),
     }
 })]
-#[case("base1 -v --name test-name set some-value", Base::Base1 {
+#[case("base1 -v --level 24 --name test-name set some-value", Base::Base1 {
     name: Some("test-name".to_string()),
+    level: 24,
     verbose: true,
     command: Base1Sub::Set {
         value: "some-value".to_string(),
     }
 })]
-#[case("base2 --level 23 get --item config -v some-file", Base::Base2 {
-    level: 23,
-    command: Base2Sub::Get {
+#[case("base2 get --item config -v some-file", Base::Base2 (
+    Base2Sub::Get {
         item: Some("config".to_string()),
         verbose: true,
         file: "some-file".to_string(),
     }
-})]
-#[case("base2 --level 23 write lines", Base::Base2 {
-    level: 23,
-    command: Base2Sub::Write {
+))]
+#[case("base2 write lines", Base::Base2 (
+    Base2Sub::Write {
         line: "lines".to_string(),
     }
-})]
+))]
 fn options_parsing(#[case] command: &str, #[case] expected: Base) {
     let mut cli = CliWrapper::new();
 

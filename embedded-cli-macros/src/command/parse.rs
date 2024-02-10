@@ -45,14 +45,23 @@ fn command_parsing(ident: &Ident, command: &Command) -> TokenStream {
     let variant_name = &command.ident;
     let variant_fqn = quote! { #ident::#variant_name };
 
-    let rhs = if command.args.is_empty() {
+    let rhs = if command.args.is_empty() && command.subcommand.is_none() {
         quote! { #variant_fqn, }
     } else {
         let (parsing, arguments) = create_arg_parsing(command);
-        quote! {
-            {
-                #parsing
-                #variant_fqn { #(#arguments)* }
+        if command.named_args {
+            quote! {
+                {
+                    #parsing
+                    #variant_fqn { #(#arguments)* }
+                }
+            }
+        } else {
+            quote! {
+                {
+                    #parsing
+                    #variant_fqn ( #(#arguments)* )
+                }
             }
         }
     };
@@ -154,8 +163,16 @@ fn create_arg_parsing(command: &Command) -> (TokenStream, Vec<TokenStream>) {
 
     let subcommand_value_arm;
     if let Some(subcommand) = &command.subcommand {
-        let fi_raw = format_ident!("{}", subcommand.field_name);
-        let fi = format_ident!("sub_{}", subcommand.field_name);
+        let fi_raw;
+        let fi;
+        if let Some(field_name) = &subcommand.field_name {
+            let ident_raw = format_ident!("{}", field_name);
+            fi_raw = quote! { #ident_raw: };
+            fi = format_ident!("sub_{}", field_name);
+        } else {
+            fi_raw = quote! {};
+            fi = format_ident!("sub_command");
+        }
         let ty = &subcommand.field_type;
 
         subcommand_value_arm = Some(quote! {
@@ -168,11 +185,11 @@ fn create_arg_parsing(command: &Command) -> (TokenStream, Vec<TokenStream>) {
         });
 
         let constructor_arg = match subcommand.ty {
-            ArgType::Option => quote! { #fi_raw: #fi },
+            ArgType::Option => quote! { #fi_raw #fi },
             ArgType::Normal => {
                 let name = subcommand.full_name();
                 quote! {
-                    #fi_raw: #fi.ok_or(_cli::service::ParseError::MissingRequiredArgument {
+                    #fi_raw #fi.ok_or(_cli::service::ParseError::MissingRequiredArgument {
                         name: #name,
                     })?
                 }

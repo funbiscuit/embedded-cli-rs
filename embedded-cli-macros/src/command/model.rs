@@ -2,7 +2,7 @@ use convert_case::{Case, Casing};
 use darling::{Error, FromField, FromMeta, FromVariant, Result};
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
-use syn::{Field, Fields, Variant};
+use syn::{Field, Fields, FieldsNamed, FieldsUnnamed, Variant};
 
 use super::args::{ArgType, TypedArg};
 
@@ -15,6 +15,7 @@ use super::doc::Help;
 struct CommandAttrs {
     attrs: Vec<syn::Attribute>,
     name: Option<String>,
+    subcommand: bool,
 }
 
 #[derive(Debug)]
@@ -207,38 +208,26 @@ impl CommandArg {
 }
 
 pub struct Subcommand {
-    pub field_name: String,
+    pub field_name: Option<String>,
     pub field_type: TokenStream,
     pub ty: ArgType,
 }
 
 impl Subcommand {
-    fn parse_field(field: &Field) -> Result<Option<Self>> {
-        let attrs = FieldCommandAttrs::from_field(field)?;
-
+    fn parse_field(field: &Field) -> Result<Self> {
         let arg = TypedArg::new(&field.ty);
 
         let ty = arg.ty();
         let field_type = arg.inner();
         let field_type = quote! { #field_type };
 
-        let field_name = field
-            .ident
-            .as_ref()
-            .expect("Only named fields are supported")
-            .to_string();
+        let field_name = field.ident.as_ref().map(|ident| ident.to_string());
 
-        let res = if attrs.subcommand {
-            Some(Self {
-                field_name,
-                field_type,
-                ty,
-            })
-        } else {
-            None
-        };
-
-        Ok(res)
+        Ok(Self {
+            field_name,
+            field_type,
+            ty,
+        })
     }
 
     pub fn full_name(&self) -> String {
@@ -260,6 +249,7 @@ pub struct Command {
     #[cfg(feature = "help")]
     pub help: Help,
     pub ident: Ident,
+    pub named_args: bool,
     pub subcommand: Option<Subcommand>,
 }
 
@@ -268,6 +258,12 @@ impl Command {
         let variant_ident = &variant.ident;
         let attrs = CommandAttrs::from_variant(variant)?;
 
+        let (named_args, (args, subcommand)) = match &variant.fields {
+            Fields::Unit => (false, (vec![], None)),
+            Fields::Unnamed(fields) => (false, Self::parse_tuple_variant(&attrs, fields)?),
+            Fields::Named(fields) => (true, Self::parse_struct_variant(fields)?),
+        };
+
         let name = attrs.name.unwrap_or_else(|| {
             variant_ident
                 .to_string()
@@ -275,70 +271,80 @@ impl Command {
                 .to_case(Case::Kebab)
         });
 
-        let mut has_positional = false;
-        let mut subcommand = None;
-
-        let args = match &variant.fields {
-            Fields::Unit => vec![],
-            Fields::Unnamed(fields) => {
-                return Err(Error::custom(
-                    "Unnamed/tuple fields are not supported. Use named fields",
-                )
-                .with_span(fields));
-            }
-            Fields::Named(fields) => {
-                let mut errors = Error::accumulator();
-                let args = fields
-                    .named
-                    .iter()
-                    .filter_map(|field| {
-                        errors.handle_in(|| {
-                            if let Some(sub) = Subcommand::parse_field(field)? {
-
-                                if has_positional {
-                                    return Err(Error::custom(
-                                        "Command cannot have both positional arguments and subcommand",
-                                    )
-                                    .with_span(&field.ident))
-                                }
-                                if subcommand.is_some() {
-                                    return Err(Error::custom(
-                                        "Command can have only single subcommand",
-                                    )
-                                    .with_span(&field.ident))
-                                }
-                                subcommand = Some(sub);
-
-                                Ok(None)
-                            } else {
-                                let arg = CommandArg::parse(field)?;
-
-                                if arg.arg_type.is_positional() && subcommand.is_some() {
-                                    return Err(Error::custom(
-                                        "Command cannot have both positional arguments and subcommand",
-                                    )
-                                    .with_span(&field.ident))
-                                }
-                                has_positional |= arg.arg_type.is_positional();
-
-                                Ok(Some(arg))
-                            }
-                        }).flatten()
-                    })
-                    .collect::<Vec<_>>();
-                errors.finish()?;
-
-                args
-            }
-        };
-
         Ok(Self {
             name,
             args,
             #[cfg(feature = "help")]
             help: Help::parse(&attrs.attrs)?,
             ident: variant_ident.clone(),
+            named_args,
             subcommand,
         })
+    }
+
+    fn parse_struct_variant(fields: &FieldsNamed) -> Result<(Vec<CommandArg>, Option<Subcommand>)> {
+        let mut has_positional = false;
+        let mut subcommand = None;
+
+        let mut errors = Error::accumulator();
+        let args = fields
+            .named
+            .iter()
+            .filter_map(|field| {
+                errors
+                    .handle_in(|| {
+                        let command_attrs = FieldCommandAttrs::from_field(field)?;
+                        if command_attrs.subcommand {
+                            if has_positional {
+                                return Err(Error::custom(
+                                    "Command cannot have both positional arguments and subcommand",
+                                )
+                                .with_span(&field.ident));
+                            }
+                            if subcommand.is_some() {
+                                return Err(Error::custom(
+                                    "Command can have only single subcommand",
+                                )
+                                .with_span(&field.ident));
+                            }
+                            subcommand = Some(Subcommand::parse_field(field)?);
+                            Ok(None)
+                        } else {
+                            let arg = CommandArg::parse(field)?;
+
+                            if arg.arg_type.is_positional() && subcommand.is_some() {
+                                return Err(Error::custom(
+                                    "Command cannot have both positional arguments and subcommand",
+                                )
+                                .with_span(&field.ident));
+                            }
+                            has_positional |= arg.arg_type.is_positional();
+
+                            Ok(Some(arg))
+                        }
+                    })
+                    .flatten()
+            })
+            .collect::<Vec<_>>();
+        errors.finish()?;
+
+        Ok((args, subcommand))
+    }
+
+    fn parse_tuple_variant(
+        attrs: &CommandAttrs,
+        fields: &FieldsUnnamed,
+    ) -> Result<(Vec<CommandArg>, Option<Subcommand>)> {
+        if fields.unnamed.len() != 1 {
+            return Err(Error::custom("Tuple variant must have single argument").with_span(&fields));
+        }
+
+        if !attrs.subcommand {
+            return Err(Error::custom("Tuple variant must be a subcommand").with_span(&fields));
+        }
+
+        let subcommand = Some(Subcommand::parse_field(&fields.unnamed[0])?);
+
+        Ok((vec![], subcommand))
     }
 }

@@ -15,6 +15,10 @@ enum CliBase<'a> {
         #[arg(short, long)]
         name: Option<&'a str>,
 
+        /// Some level
+        #[arg(short, long)]
+        level: u8,
+
         /// Make things verbose
         #[arg(short)]
         verbose: bool,
@@ -24,15 +28,8 @@ enum CliBase<'a> {
     },
 
     /// Another base command
-    #[command(name = "base2")]
-    Base2 {
-        /// Some level
-        #[arg(short, long)]
-        level: u8,
-
-        #[command(subcommand)]
-        command: CliBase2Sub<'a>,
-    },
+    #[command(name = "base2", subcommand)]
+    Base2(CliBase2Sub<'a>),
 }
 
 #[derive(Debug, Clone, Command, PartialEq)]
@@ -110,15 +107,13 @@ enum Base {
     Base1 {
         name: Option<String>,
 
+        level: u8,
+
         verbose: bool,
 
         command: Base1Sub,
     },
-    Base2 {
-        level: u8,
-
-        command: Base2Sub,
-    },
+    Base2(Base2Sub),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -172,17 +167,16 @@ impl<'a> From<CliBase<'a>> for Base {
         match value {
             CliBase::Base1 {
                 name,
+                level,
                 verbose,
                 command,
             } => Self::Base1 {
                 name: name.map(|n| n.to_string()),
+                level,
                 verbose,
                 command: command.into(),
             },
-            CliBase::Base2 { level, command } => Self::Base2 {
-                level,
-                command: command.into(),
-            },
+            CliBase::Base2(command) => Self::Base2(command.into()),
         }
     }
 }
@@ -252,9 +246,10 @@ impl<'a> From<CliBase2Sub<'a>> for Base2Sub {
     "Usage: base1 [OPTIONS] <COMMAND>",
     "",
     "Options:",
-    "  -n, --name [NAME]  Optional argument",
-    "  -v                 Make things verbose",
-    "  -h, --help         Print help",
+    "  -n, --name [NAME]    Optional argument",
+    "  -l, --level <LEVEL>  Some level",
+    "  -v                   Make things verbose",
+    "  -h, --help           Print help",
     "",
     "Commands:",
     "  get  Get something",
@@ -340,11 +335,10 @@ impl<'a> From<CliBase2Sub<'a>> for Base2Sub {
 #[case("base2 --help", &[
     "Another base command",
     "",
-    "Usage: base2 [OPTIONS] <COMMAND>",
+    "Usage: base2 <COMMAND>",
     "",
     "Options:",
-    "  -l, --level <LEVEL>  Some level",
-    "  -h, --help           Print help",
+    "  -h, --help  Print help",
     "",
     "Commands:",
     "  get    Get something but differently",
