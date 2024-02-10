@@ -7,7 +7,7 @@ use super::{model::Command, TargetType};
 #[cfg(feature = "autocomplete")]
 pub fn derive_autocomplete(target: &TargetType, commands: &[Command]) -> Result<TokenStream> {
     let command_count = commands.len();
-    let command_names: Vec<String> = commands.iter().map(|c| c.name().to_string()).collect();
+    let command_names: Vec<String> = commands.iter().map(|c| c.name.to_string()).collect();
 
     let ident = target.ident();
     let named_lifetime = target.named_lifetime();

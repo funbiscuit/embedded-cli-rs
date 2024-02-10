@@ -76,11 +76,6 @@ struct FieldCommandAttrs {
     subcommand: bool,
 }
 
-pub enum CommandArgs {
-    None,
-    Named(Vec<CommandArg>),
-}
-
 #[derive(Debug, Eq, PartialEq)]
 pub enum CommandArgType {
     /// Arg is flag and is enabled via long (--name) or short (-n) syntax.
@@ -96,7 +91,6 @@ pub enum CommandArgType {
         short: Option<char>,
     },
     Positional,
-    SubCommand,
 }
 
 #[allow(unused)]
@@ -111,25 +105,19 @@ impl CommandArgType {
     pub fn is_positional(&self) -> bool {
         self == &CommandArgType::Positional
     }
-
-    pub fn is_subcommand(&self) -> bool {
-        self == &CommandArgType::SubCommand
-    }
 }
 
 pub struct CommandArg {
-    arg_type: CommandArgType,
-    field_name: String,
-    field_type: TokenStream,
+    pub arg_type: CommandArgType,
+    pub field_name: String,
+    pub field_type: TokenStream,
     #[cfg(feature = "help")]
-    help: Help,
-    ty: ArgType,
+    pub help: Help,
+    pub ty: ArgType,
 }
 
 impl CommandArg {
     fn parse(field: &Field) -> Result<Self> {
-        let command_attrs = FieldCommandAttrs::from_field(field)?;
-
         let arg_attrs = ArgAttrs::from_field(field)?;
 
         let field_name = field
@@ -171,12 +159,9 @@ impl CommandArg {
             } else {
                 CommandArgType::Option { long, short }
             }
-        } else if command_attrs.subcommand {
-            CommandArgType::SubCommand
         } else {
             CommandArgType::Positional
         };
-
         Ok(Self {
             arg_type,
             field_name,
@@ -187,69 +172,95 @@ impl CommandArg {
         })
     }
 
-    pub fn arg_type(&self) -> &CommandArgType {
-        &self.arg_type
-    }
-
     pub fn full_name(&self) -> String {
         match &self.arg_type {
-            CommandArgType::Flag { long, short } | CommandArgType::Option { long, short } => {
+            CommandArgType::Flag { long, short } => long
+                .as_ref()
+                .map(|name| format!("--{}", name))
+                .or(short.map(|n| format!("-{}", n)))
+                .unwrap(),
+            CommandArgType::Option { long, short } => {
                 let prefix = long
                     .as_ref()
                     .map(|name| format!("--{}", name))
                     .or(short.map(|n| format!("-{}", n)))
                     .unwrap();
                 if self.is_optional() {
-                    format!("{} [{}]", prefix, self.name().to_uppercase())
+                    format!("{} [{}]", prefix, self.field_name.to_uppercase())
                 } else {
-                    format!("{} <{}>", prefix, self.name().to_uppercase())
+                    format!("{} <{}>", prefix, self.field_name.to_uppercase())
                 }
             }
             CommandArgType::Positional => {
                 if self.is_optional() {
-                    format!("[{}]", self.name().to_uppercase())
+                    format!("[{}]", self.field_name.to_uppercase())
                 } else {
-                    format!("<{}>", self.name().to_uppercase())
-                }
-            }
-            CommandArgType::SubCommand => {
-                if self.is_optional() {
-                    "[COMMAND]".to_string()
-                } else {
-                    "<COMMAND>".to_string()
+                    format!("<{}>", self.field_name.to_uppercase())
                 }
             }
         }
     }
 
-    #[cfg(feature = "help")]
-    pub fn help(&self) -> &Help {
-        &self.help
+    pub fn is_optional(&self) -> bool {
+        self.ty == ArgType::Option
+    }
+}
+
+pub struct Subcommand {
+    pub field_name: String,
+    pub field_type: TokenStream,
+    pub ty: ArgType,
+}
+
+impl Subcommand {
+    fn parse_field(field: &Field) -> Result<Option<Self>> {
+        let attrs = FieldCommandAttrs::from_field(field)?;
+
+        let arg = TypedArg::new(&field.ty);
+
+        let ty = arg.ty();
+        let field_type = arg.inner();
+        let field_type = quote! { #field_type };
+
+        let field_name = field
+            .ident
+            .as_ref()
+            .expect("Only named fields are supported")
+            .to_string();
+
+        let res = if attrs.subcommand {
+            Some(Self {
+                field_name,
+                field_type,
+                ty,
+            })
+        } else {
+            None
+        };
+
+        Ok(res)
+    }
+
+    pub fn full_name(&self) -> String {
+        if self.is_optional() {
+            "[COMMAND]".to_string()
+        } else {
+            "<COMMAND>".to_string()
+        }
     }
 
     pub fn is_optional(&self) -> bool {
         self.ty == ArgType::Option
     }
-
-    pub fn name(&self) -> &str {
-        &self.field_name
-    }
-
-    pub fn field_type(&self) -> &TokenStream {
-        &self.field_type
-    }
-
-    pub fn ty(&self) -> ArgType {
-        self.ty.clone()
-    }
 }
 
 pub struct Command {
-    name: String,
-    args: CommandArgs,
+    pub name: String,
+    pub args: Vec<CommandArg>,
     #[cfg(feature = "help")]
-    help: Help,
-    ident: Ident,
+    pub help: Help,
+    pub ident: Ident,
+    pub subcommand: Option<Subcommand>,
 }
 
 impl Command {
@@ -264,11 +275,11 @@ impl Command {
                 .to_case(Case::Kebab)
         });
 
-        let mut has_subcommand = false;
         let mut has_positional = false;
+        let mut subcommand = None;
 
         let args = match &variant.fields {
-            Fields::Unit => CommandArgs::None,
+            Fields::Unit => vec![],
             Fields::Unnamed(fields) => {
                 return Err(Error::custom(
                     "Unnamed/tuple fields are not supported. Use named fields",
@@ -282,39 +293,42 @@ impl Command {
                     .iter()
                     .filter_map(|field| {
                         errors.handle_in(|| {
-                            let arg = CommandArg::parse(field)?;
+                            if let Some(sub) = Subcommand::parse_field(field)? {
 
-                            match arg.arg_type() {
-                                CommandArgType::Positional if has_subcommand => {
+                                if has_positional {
                                     return Err(Error::custom(
                                         "Command cannot have both positional arguments and subcommand",
                                     )
                                     .with_span(&field.ident))
-                                },
-                                CommandArgType::SubCommand if has_positional => {
-                                    return Err(Error::custom(
-                                        "Command cannot have both positional arguments and subcommand",
-                                    )
-                                    .with_span(&field.ident))
-                                },
-                                CommandArgType::SubCommand if has_subcommand => {
+                                }
+                                if subcommand.is_some() {
                                     return Err(Error::custom(
                                         "Command can have only single subcommand",
                                     )
                                     .with_span(&field.ident))
-                                },
-                                _ => {}
-                            }
-                            has_positional |= arg.arg_type().is_positional();
-                            has_subcommand |= arg.arg_type().is_subcommand();
+                                }
+                                subcommand = Some(sub);
 
-                            Ok(arg)
-                        })
+                                Ok(None)
+                            } else {
+                                let arg = CommandArg::parse(field)?;
+
+                                if arg.arg_type.is_positional() && subcommand.is_some() {
+                                    return Err(Error::custom(
+                                        "Command cannot have both positional arguments and subcommand",
+                                    )
+                                    .with_span(&field.ident))
+                                }
+                                has_positional |= arg.arg_type.is_positional();
+
+                                Ok(Some(arg))
+                            }
+                        }).flatten()
                     })
                     .collect::<Vec<_>>();
                 errors.finish()?;
 
-                CommandArgs::Named(args)
+                args
             }
         };
 
@@ -324,31 +338,7 @@ impl Command {
             #[cfg(feature = "help")]
             help: Help::parse(&attrs.attrs)?,
             ident: variant_ident.clone(),
+            subcommand,
         })
-    }
-
-    pub fn args(&self) -> &CommandArgs {
-        &self.args
-    }
-
-    #[cfg(feature = "help")]
-    pub fn help(&self) -> &Help {
-        &self.help
-    }
-
-    pub fn ident(&self) -> &Ident {
-        &self.ident
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    #[cfg(feature = "help")]
-    pub fn subcommand(&self) -> Option<&CommandArg> {
-        match &self.args {
-            CommandArgs::Named(args) => args.iter().find(|arg| arg.arg_type.is_subcommand()),
-            _ => None,
-        }
     }
 }

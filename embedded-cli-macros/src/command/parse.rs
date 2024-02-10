@@ -3,11 +3,9 @@ use darling::Result;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 
-use crate::command::model::CommandArgs;
-
 use super::{
     args::ArgType,
-    model::{Command, CommandArg, CommandArgType},
+    model::{Command, CommandArgType},
     TargetType,
 };
 
@@ -43,19 +41,18 @@ fn create_parsing(ident: &Ident, commands: &[Command]) -> Result<TokenStream> {
 }
 
 fn command_parsing(ident: &Ident, command: &Command) -> TokenStream {
-    let name = command.name();
-    let variant_name = command.ident();
+    let name = &command.name;
+    let variant_name = &command.ident;
     let variant_fqn = quote! { #ident::#variant_name };
 
-    let rhs = match command.args() {
-        CommandArgs::None => quote! { #variant_fqn, },
-        CommandArgs::Named(args) => {
-            let (parsing, arguments) = create_arg_parsing(args);
-            quote! {
-                {
-                    #parsing
-                    #variant_fqn { #(#arguments)* }
-                }
+    let rhs = if command.args.is_empty() {
+        quote! { #variant_fqn, }
+    } else {
+        let (parsing, arguments) = create_arg_parsing(command);
+        quote! {
+            {
+                #parsing
+                #variant_fqn { #(#arguments)* }
             }
         }
     };
@@ -63,24 +60,23 @@ fn command_parsing(ident: &Ident, command: &Command) -> TokenStream {
     quote! {  #name => #rhs }
 }
 
-fn create_arg_parsing(args: &[CommandArg]) -> (TokenStream, Vec<TokenStream>) {
+fn create_arg_parsing(command: &Command) -> (TokenStream, Vec<TokenStream>) {
     let mut variables = vec![];
     let mut arguments = vec![];
     let mut positional_value_arms = vec![];
     let mut extra_states = vec![];
     let mut option_name_arms = vec![];
     let mut option_value_arms = vec![];
-    let mut subcommand_value_arm = None;
 
     let mut positional = 0usize;
-    for arg in args.iter() {
-        let fi_raw = format_ident!("{}", arg.name());
-        let fi = format_ident!("arg_{}", arg.name());
-        let ty = arg.field_type();
+    for arg in &command.args {
+        let fi_raw = format_ident!("{}", arg.field_name);
+        let fi = format_ident!("arg_{}", arg.field_name);
+        let ty = &arg.field_type;
 
         let arg_default;
 
-        match arg.arg_type() {
+        match &arg.arg_type {
             CommandArgType::Flag { long, short } => {
                 arg_default = Some(quote! { false });
 
@@ -99,7 +95,7 @@ fn create_arg_parsing(args: &[CommandArg]) -> (TokenStream, Vec<TokenStream>) {
                 arg_default = None;
                 let state = format_ident!(
                     "Expect{}",
-                    arg.name().from_case(Case::Snake).to_case(Case::Pascal)
+                    arg.field_name.from_case(Case::Snake).to_case(Case::Pascal)
                 );
                 extra_states.push(quote! { #state, });
 
@@ -128,22 +124,9 @@ fn create_arg_parsing(args: &[CommandArg]) -> (TokenStream, Vec<TokenStream>) {
                 });
                 positional += 1;
             }
-            CommandArgType::SubCommand => {
-                // in model we checked that subcommand is only one and there is no positional args
-                arg_default = None;
-
-                subcommand_value_arm = Some(quote! {
-                    let args = args.into_args();
-                    let raw = _cli::command::RawCommand::new(name, args);
-
-                    #fi = Some(<#ty as _cli::service::FromRaw>::parse(raw)?);
-
-                    break;
-                });
-            }
         }
 
-        let constructor_arg = match arg.ty() {
+        let constructor_arg = match arg.ty {
             ArgType::Option => quote! { #fi_raw: #fi },
             ArgType::Normal => {
                 if let Some(default) = arg_default {
@@ -167,6 +150,43 @@ fn create_arg_parsing(args: &[CommandArg]) -> (TokenStream, Vec<TokenStream>) {
         arguments.push(quote! {
             #constructor_arg,
         });
+    }
+
+    let subcommand_value_arm;
+    if let Some(subcommand) = &command.subcommand {
+        let fi_raw = format_ident!("{}", subcommand.field_name);
+        let fi = format_ident!("sub_{}", subcommand.field_name);
+        let ty = &subcommand.field_type;
+
+        subcommand_value_arm = Some(quote! {
+            let args = args.into_args();
+            let raw = _cli::command::RawCommand::new(name, args);
+
+            #fi = Some(<#ty as _cli::service::FromRaw>::parse(raw)?);
+
+            break;
+        });
+
+        let constructor_arg = match subcommand.ty {
+            ArgType::Option => quote! { #fi_raw: #fi },
+            ArgType::Normal => {
+                let name = subcommand.full_name();
+                quote! {
+                    #fi_raw: #fi.ok_or(_cli::service::ParseError::MissingRequiredArgument {
+                        name: #name,
+                    })?
+                }
+            }
+        };
+
+        variables.push(quote! {
+            let mut #fi = None;
+        });
+        arguments.push(quote! {
+            #constructor_arg,
+        });
+    } else {
+        subcommand_value_arm = None;
     }
 
     let value_arm = if let Some(subcommand_arm) = subcommand_value_arm {

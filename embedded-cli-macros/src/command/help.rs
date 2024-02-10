@@ -5,7 +5,7 @@ use quote::quote;
 use super::{model::Command, TargetType};
 
 #[cfg(feature = "help")]
-use super::model::{CommandArgType, CommandArgs};
+use super::model::{CommandArg, CommandArgType};
 
 #[cfg(feature = "help")]
 pub fn derive_help(
@@ -72,12 +72,12 @@ pub fn derive_help(
 
 #[cfg(feature = "help")]
 fn create_help_all(commands: &[Command], title: &str) -> Result<TokenStream> {
-    let max_len = commands.iter().map(|c| c.name().len()).max().unwrap_or(0);
+    let max_len = commands.iter().map(|c| c.name.len()).max().unwrap_or(0);
     let elements: Vec<_> = commands
         .iter()
         .map(|c| {
-            let name = c.name();
-            let help = c.help().short().unwrap_or("");
+            let name = &c.name;
+            let help = c.help.short().unwrap_or("");
             quote! {
                 writer.write_list_element(#name, #help, #max_len)?;
             }
@@ -99,16 +99,16 @@ fn create_command_help(command: &Command) -> TokenStream {
 
     use crate::command::parse;
 
-    let name = command.name();
+    let name = &command.name;
 
-    let help = command.help().long().map(|help| {
+    let help = command.help.long().map(|help| {
         quote! { writer.writeln_str(#help)?; }
     });
 
-    let usage = create_usage(name, command.args());
-    let args_help = create_args_help(command.args());
-    let options_help = create_options_help(command.args());
-    let commands_help = create_commands_help(command.args());
+    let usage = create_usage(name, command);
+    let args_help = create_args_help(&command.args);
+    let options_help = create_options_help(&command.args);
+    let commands_help = create_commands_help(command);
 
     let blocks = help
         .into_iter()
@@ -125,16 +125,13 @@ fn create_command_help(command: &Command) -> TokenStream {
         })
         .unwrap();
 
-    if let (Some(_), CommandArgs::Named(args)) = (command.subcommand(), command.args()) {
+    if let Some(subcommand) = &command.subcommand {
         let mut extra_states = vec![];
         let mut option_name_arms = vec![];
         let mut option_value_arms = vec![];
-        let mut subcommand_value_arm = None;
 
-        for arg in args.iter() {
-            let ty = arg.field_type();
-
-            match arg.arg_type() {
+        for arg in &command.args {
+            match &arg.arg_type {
                 CommandArgType::Flag { long, short } => {
                     option_name_arms.push(parse::create_option_name_arm(
                         short,
@@ -149,7 +146,7 @@ fn create_command_help(command: &Command) -> TokenStream {
                 CommandArgType::Option { long, short } => {
                     let state = format_ident!(
                         "Expect{}",
-                        arg.name().from_case(Case::Snake).to_case(Case::Pascal)
+                        arg.field_name.from_case(Case::Snake).to_case(Case::Pascal)
                     );
                     extra_states.push(quote! { #state, });
 
@@ -165,27 +162,26 @@ fn create_command_help(command: &Command) -> TokenStream {
                         quote! { state = States::#state },
                     ));
                 }
-                CommandArgType::SubCommand => {
-                    subcommand_value_arm = Some(quote! {
-                        let args = args.into_args();
-                        let raw = _cli::command::RawCommand::new(name, args);
-
-                        let mut parent = |writer: &mut _cli::writer::Writer<'_, W, E>| {
-                            parent(writer)?;
-                            writer.write_str(#name)?;
-                            writer.write_str(" ")?;
-                            Ok(())
-                        };
-
-                        return <#ty as _cli::service::Help>::command_help(&mut parent, raw, writer);
-                    });
-                }
                 CommandArgType::Positional => {
                     unreachable!("command with subcommand doesn't have positional args")
                 }
             }
         }
-        let subcommand_value_arm = subcommand_value_arm.unwrap();
+
+        let subcommand_ty = &subcommand.field_type;
+        let subcommand_value_arm = quote! {
+            let args = args.into_args();
+            let raw = _cli::command::RawCommand::new(name, args);
+
+            let mut parent = |writer: &mut _cli::writer::Writer<'_, W, E>| {
+                parent(writer)?;
+                writer.write_str(#name)?;
+                writer.write_str(" ")?;
+                Ok(())
+            };
+
+            return <#subcommand_ty as _cli::service::Help>::command_help(&mut parent, raw, writer);
+        };
 
         let value_arm = quote! {
             _cli::arguments::Arg::Value(name) if state == States::Normal => {
@@ -227,38 +223,30 @@ fn create_command_help(command: &Command) -> TokenStream {
 }
 
 #[cfg(feature = "help")]
-fn create_args_help(args: &CommandArgs) -> Option<TokenStream> {
-    let help_lines = match args {
-        CommandArgs::None => vec![],
-        CommandArgs::Named(args) => {
-            // 2 is added to account for brackets
-            let longest_arg = args
-                .iter()
-                .filter(|a| a.arg_type().is_positional())
-                .map(|a| a.name().len() + 2)
-                .max()
-                .unwrap_or(0);
+fn create_args_help(args: &[CommandArg]) -> Option<TokenStream> {
+    // 2 is added to account for brackets
+    let longest_arg = args
+        .iter()
+        .filter(|a| a.arg_type.is_positional())
+        .map(|a| a.field_name.len() + 2)
+        .max()
+        .unwrap_or(0);
 
-            args.iter()
-                .filter_map(|arg| match arg.arg_type() {
-                    CommandArgType::Positional => {
-                        let name = if arg.is_optional() {
-                            format!("[{}]", arg.name().to_uppercase())
-                        } else {
-                            format!("<{}>", arg.name().to_uppercase())
-                        };
+    let help_lines = args
+        .iter()
+        .filter_map(|arg| match &arg.arg_type {
+            CommandArgType::Positional => {
+                let name = arg.full_name();
 
-                        let arg_help = arg.help().short().unwrap_or("");
+                let arg_help = arg.help.short().unwrap_or("");
 
-                        Some(quote! {
-                            writer.write_list_element(#name, #arg_help, #longest_arg)?;
-                        })
-                    }
-                    _ => None,
+                Some(quote! {
+                    writer.write_list_element(#name, #arg_help, #longest_arg)?;
                 })
-                .collect::<Vec<_>>()
-        }
-    };
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
 
     if help_lines.is_empty() {
         None
@@ -271,70 +259,61 @@ fn create_args_help(args: &CommandArgs) -> Option<TokenStream> {
 }
 
 #[cfg(feature = "help")]
-fn create_commands_help(args: &CommandArgs) -> Option<TokenStream> {
-    match args {
-        CommandArgs::None => None,
-        CommandArgs::Named(args) => {
-            args.iter()
-                .find(|arg| arg.arg_type().is_subcommand())
-                .map(|arg| {
-                    let ty = arg.field_type();
-                    quote! {
-                        <#ty as _cli::service::Help>::list_commands(writer)?;
-                    }
-                })
+fn create_commands_help(command: &Command) -> Option<TokenStream> {
+    command.subcommand.as_ref().map(|subcommand| {
+        let ty = &subcommand.field_type;
+        quote! {
+            <#ty as _cli::service::Help>::list_commands(writer)?;
         }
-    }
+    })
 }
 
 #[cfg(feature = "help")]
-fn create_options_help(args: &CommandArgs) -> TokenStream {
+fn create_options_help(args: &[CommandArg]) -> TokenStream {
     struct OptionHelp {
         name: String,
         help: String,
     }
 
-    let mut help_lines = match args {
-        CommandArgs::None => vec![],
-        CommandArgs::Named(args) => args
-            .iter()
-            .filter_map(|arg| match arg.arg_type() {
-                CommandArgType::Flag { long, short } => {
-                    let name = short
-                        .map(|name| format!("-{}", name))
-                        .into_iter()
-                        .chain(long.iter().map(|name| format!("--{}", name)))
-                        .collect::<Vec<_>>()
-                        .join(", ");
+    let mut help_lines = args
+        .iter()
+        .filter_map(|arg| match &arg.arg_type {
+            CommandArgType::Flag { long, short } => {
+                let name = short
+                    .map(|name| format!("-{}", name))
+                    .into_iter()
+                    .chain(long.iter().map(|name| format!("--{}", name)))
+                    .collect::<Vec<_>>()
+                    .join(", ");
 
-                    let help = arg.help().short().unwrap_or("").to_string();
+                let help = arg.help.short().unwrap_or("").to_string();
 
-                    Some(OptionHelp { name, help })
-                }
-                CommandArgType::Option { long, short } => {
-                    let name = short
-                        .map(|name| format!("-{}", name))
-                        .into_iter()
-                        .chain(long.iter().map(|name| format!("--{}", name)))
-                        .collect::<Vec<_>>()
-                        .join(", ");
+                Some(OptionHelp { name, help })
+            }
+            CommandArgType::Option { long, short } => {
+                let name = short
+                    .map(|name| format!("-{}", name))
+                    .into_iter()
+                    .chain(long.iter().map(|name| format!("--{}", name)))
+                    .collect::<Vec<_>>()
+                    .join(", ");
 
-                    let value = if arg.is_optional() {
-                        format!("[{}]", arg.name().to_uppercase())
-                    } else {
-                        format!("<{}>", arg.name().to_uppercase())
-                    };
+                let value = if arg.is_optional() {
+                    format!("[{}]", arg.field_name.to_uppercase())
+                } else {
+                    format!("<{}>", arg.field_name.to_uppercase())
+                };
 
-                    let name = format!("{} {}", name, value);
+                let name = format!("{} {}", name, value);
 
-                    let help = arg.help().short().unwrap_or("").to_string();
+                let help = arg.help.short().unwrap_or("").to_string();
 
-                    Some(OptionHelp { name, help })
-                }
-                CommandArgType::Positional | CommandArgType::SubCommand => None,
-            })
-            .collect::<Vec<_>>(),
-    };
+                Some(OptionHelp { name, help })
+            }
+            CommandArgType::Positional => None,
+        })
+        .collect::<Vec<_>>();
+
     help_lines.push(OptionHelp {
         name: "-h, --help".to_string(),
         help: "Print help".to_string(),
@@ -360,53 +339,36 @@ fn create_options_help(args: &CommandArgs) -> TokenStream {
 }
 
 #[cfg(feature = "help")]
-fn create_usage(name: &str, args: &CommandArgs) -> TokenStream {
-    let has_options;
+fn create_usage(name: &str, command: &Command) -> TokenStream {
+    let args = &command.args;
+    let has_options = args.iter().any(|arg| arg.arg_type.is_option());
+
     let usage_args;
-
-    match args {
-        CommandArgs::None => {
-            has_options = false;
-            usage_args = vec![quote! {}];
+    if let Some(subcommand) = &command.subcommand {
+        if subcommand.is_optional() {
+            usage_args = vec![quote! {
+                writer.write_str(" [COMMAND]")?;
+            }]
+        } else {
+            usage_args = vec![quote! {
+                writer.write_str(" <COMMAND>")?;
+            }]
         }
-        CommandArgs::Named(args) => {
-            has_options = args.iter().any(|arg| arg.arg_type().is_option());
-            let subcommand = args.iter().find(|arg| arg.arg_type().is_subcommand());
-
-            if let Some(subcommand) = subcommand {
-                if subcommand.is_optional() {
-                    usage_args = vec![quote! {
-                        writer.write_str(" [COMMAND]")?;
-                    }]
-                } else {
-                    usage_args = vec![quote! {
-                        writer.write_str(" <COMMAND>")?;
-                    }]
+    } else {
+        usage_args = args
+            .iter()
+            .filter_map(|arg| match &arg.arg_type {
+                CommandArgType::Positional => Some(arg.full_name()),
+                _ => None,
+            })
+            .map(|line| {
+                quote! {
+                    writer.write_str(" ")?;
+                    writer.write_str(#line)?;
                 }
-            } else {
-                usage_args = args
-                    .iter()
-                    .filter_map(|arg| match arg.arg_type() {
-                        crate::command::model::CommandArgType::Positional => {
-                            let name = if arg.is_optional() {
-                                format!("[{}]", arg.name().to_uppercase())
-                            } else {
-                                format!("<{}>", arg.name().to_uppercase())
-                            };
-                            Some(name)
-                        }
-                        _ => None,
-                    })
-                    .map(|line| {
-                        quote! {
-                            writer.write_str(" ")?;
-                            writer.write_str(#line)?;
-                        }
-                    })
-                    .collect::<Vec<_>>()
-            }
-        }
-    };
+            })
+            .collect::<Vec<_>>()
+    }
 
     let options = if has_options {
         quote! { writer.write_str(" [OPTIONS]")?; }

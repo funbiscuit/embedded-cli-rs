@@ -2,7 +2,7 @@ use syn::Type;
 
 use crate::utils;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ArgType {
     Option,
     Normal,
@@ -35,6 +35,6 @@ impl<'a> TypedArg<'a> {
     }
 
     pub fn ty(&self) -> ArgType {
-        self.ty.clone()
+        self.ty
     }
 }
