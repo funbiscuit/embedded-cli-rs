@@ -81,4 +81,4 @@ jobs:
 
       - name: Build
         working-directory: examples/arduino
-        run: cargo build
+        run: cargo build --release
