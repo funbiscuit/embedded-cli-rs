@@ -101,7 +101,7 @@ fn create_arg_parsing(command: &Command) -> (TokenStream, Vec<TokenStream>) {
                 ));
             }
             CommandArgType::Option { long, short } => {
-                arg_default = None;
+                arg_default = arg.default_value.clone();
                 let state = format_ident!(
                     "Expect{}",
                     arg.field_name.from_case(Case::Snake).to_case(Case::Pascal)
@@ -123,7 +123,7 @@ fn create_arg_parsing(command: &Command) -> (TokenStream, Vec<TokenStream>) {
                 ));
             }
             CommandArgType::Positional => {
-                arg_default = None;
+                arg_default = arg.default_value.clone();
                 let parse_value = create_parse_arg_value(ty);
 
                 positional_value_arms.push(quote! {

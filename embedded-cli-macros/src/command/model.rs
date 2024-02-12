@@ -2,7 +2,7 @@ use convert_case::{Case, Casing};
 use darling::{Error, FromField, FromMeta, FromVariant, Result};
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
-use syn::{Field, Fields, FieldsNamed, FieldsUnnamed, Variant};
+use syn::{Expr, Field, Fields, FieldsNamed, FieldsUnnamed, Variant};
 
 use super::args::{ArgType, TypedArg};
 
@@ -64,9 +64,27 @@ impl FromMeta for ShortName {
     }
 }
 
+#[derive(Debug)]
+enum TypedDefault {
+    Generated,
+    Fixed(Expr),
+}
+
+impl FromMeta for TypedDefault {
+    fn from_expr(value: &Expr) -> Result<Self> {
+        Ok(Self::Fixed(value.clone()))
+    }
+
+    fn from_word() -> Result<Self> {
+        Ok(Self::Generated)
+    }
+}
+
 #[derive(Debug, FromField, Default)]
 #[darling(default, attributes(arg), forward_attrs(allow, doc, cfg))]
 struct ArgAttrs {
+    default_value: Option<String>,
+    default_value_t: Option<TypedDefault>,
     short: Option<ShortName>,
     long: Option<LongName>,
     value_name: Option<String>,
@@ -111,6 +129,7 @@ impl CommandArgType {
 
 pub struct CommandArg {
     pub arg_type: CommandArgType,
+    pub default_value: Option<TokenStream>,
     pub field_name: String,
     pub field_type: TokenStream,
     #[cfg(feature = "help")]
@@ -146,9 +165,9 @@ impl CommandArg {
             LongName::Fixed(name) => name,
         });
         if let Some(long) = &long {
-            if long.chars().any(|c| !c.is_ascii_alphabetic() && c != '-') {
+            if long.chars().any(|c| !c.is_ascii_alphanumeric() && c != '-') {
                 return Err(Error::custom(
-                    "Option name must consist of alphabetic ASCII chars",
+                    "Option name must consist of alphanumeric ASCII chars",
                 ));
             }
         }
@@ -167,8 +186,29 @@ impl CommandArg {
         } else {
             CommandArgType::Positional
         };
+
+        let default_value = match (arg_attrs.default_value, arg_attrs.default_value_t) {
+            (Some(value), None) => Some(quote! {
+                <#field_type as _cli::arguments::FromArgument>::from_arg(#value)?,
+            }),
+            (None, Some(value)) => {
+                let value = match value {
+                    TypedDefault::Generated => quote! { Default::default() },
+                    TypedDefault::Fixed(expr) => quote! { #expr },
+                };
+                Some(quote! { #value })
+            }
+            (None, None) => None,
+            _ => {
+                return Err(Error::custom(
+                    "Only one of default_value or default_value_t is allowed",
+                ))
+            }
+        };
+
         Ok(Self {
             arg_type,
+            default_value,
             field_name,
             field_type,
             #[cfg(feature = "help")]

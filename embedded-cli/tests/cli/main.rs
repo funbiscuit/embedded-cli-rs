@@ -5,6 +5,7 @@ mod autocomplete;
 #[cfg(not(feature = "autocomplete"))]
 mod autocomplete_disabled;
 mod base;
+mod defaults;
 #[cfg(feature = "help")]
 mod help_simple;
 #[cfg(feature = "help")]
