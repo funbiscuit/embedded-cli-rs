@@ -69,6 +69,7 @@ impl FromMeta for ShortName {
 struct ArgAttrs {
     short: Option<ShortName>,
     long: Option<LongName>,
+    value_name: Option<String>,
 }
 
 #[derive(Debug, FromField, Default)]
@@ -115,6 +116,7 @@ pub struct CommandArg {
     #[cfg(feature = "help")]
     pub help: Help,
     pub ty: ArgType,
+    pub value_name: String,
 }
 
 impl CommandArg {
@@ -126,6 +128,8 @@ impl CommandArg {
             .as_ref()
             .expect("Only named fields are supported")
             .to_string();
+
+        let value_name = arg_attrs.value_name.unwrap_or(field_name.to_uppercase());
 
         let short = arg_attrs.short.map(|s| match s {
             ShortName::Generated => field_name.chars().next().unwrap(),
@@ -170,6 +174,7 @@ impl CommandArg {
             #[cfg(feature = "help")]
             help: Help::parse(&field.attrs)?,
             ty,
+            value_name,
         })
     }
 
@@ -187,16 +192,16 @@ impl CommandArg {
                     .or(short.map(|n| format!("-{}", n)))
                     .unwrap();
                 if self.is_optional() {
-                    format!("{} [{}]", prefix, self.field_name.to_uppercase())
+                    format!("{} [{}]", prefix, self.value_name)
                 } else {
-                    format!("{} <{}>", prefix, self.field_name.to_uppercase())
+                    format!("{} <{}>", prefix, self.value_name)
                 }
             }
             CommandArgType::Positional => {
                 if self.is_optional() {
-                    format!("[{}]", self.field_name.to_uppercase())
+                    format!("[{}]", self.value_name)
                 } else {
-                    format!("<{}>", self.field_name.to_uppercase())
+                    format!("<{}>", self.value_name)
                 }
             }
         }

@@ -224,11 +224,10 @@ fn create_command_help(command: &Command) -> TokenStream {
 
 #[cfg(feature = "help")]
 fn create_args_help(args: &[CommandArg]) -> Option<TokenStream> {
-    // 2 is added to account for brackets
     let longest_arg = args
         .iter()
         .filter(|a| a.arg_type.is_positional())
-        .map(|a| a.field_name.len() + 2)
+        .map(|a| a.full_name().len())
         .max()
         .unwrap_or(0);
 
@@ -299,9 +298,9 @@ fn create_options_help(args: &[CommandArg]) -> TokenStream {
                     .join(", ");
 
                 let value = if arg.is_optional() {
-                    format!("[{}]", arg.field_name.to_uppercase())
+                    format!("[{}]", arg.value_name)
                 } else {
-                    format!("<{}>", arg.field_name.to_uppercase())
+                    format!("<{}>", arg.value_name)
                 };
 
                 let name = format!("{} {}", name, value);

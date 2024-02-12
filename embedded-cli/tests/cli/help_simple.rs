@@ -24,7 +24,7 @@ enum CliBase<'a> {
     #[command(name = "base2")]
     Base2 {
         /// Some level
-        #[arg(short, long)]
+        #[arg(short, long, value_name = "lvl")]
         level: u8,
     },
 
@@ -35,6 +35,7 @@ enum CliBase<'a> {
         task: &'a str,
 
         /// Source file
+        #[arg(value_name = "FILE")]
         file1: &'a str,
 
         /// Destination file
@@ -106,16 +107,16 @@ impl<'a> From<CliBase<'a>> for Base {
     "Usage: base2 [OPTIONS]",
     "",
     "Options:",
-    "  -l, --level <LEVEL>  Some level",
-    "  -h, --help           Print help",
+    "  -l, --level <lvl>  Some level",
+    "  -h, --help         Print help",
 ])]
 #[case("test --help", &[
     "Test command",
     "",
-    "Usage: test [OPTIONS] <FILE1> <FILE2>",
+    "Usage: test [OPTIONS] <FILE> <FILE2>",
     "",
     "Arguments:",
-    "  <FILE1>  Source file",
+    "  <FILE>   Source file",
     "  <FILE2>  Destination file",
     "",
     "Options:",
