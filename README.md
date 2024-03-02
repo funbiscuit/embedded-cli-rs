@@ -48,7 +48,7 @@ Add `embedded-cli` and necessary crates to your app:
 
 ```toml
 [dependencies]
-embedded-cli = "0.2.0"
+embedded-cli = "0.2.1"
 embedded-io = "0.6.1"
 ufmt = "0.2.0"
 ```
