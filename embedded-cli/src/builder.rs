@@ -6,11 +6,13 @@ use crate::{buffer::Buffer, cli::Cli, writer::EmptyWriter};
 
 pub const DEFAULT_CMD_LEN: usize = 40;
 pub const DEFAULT_HISTORY_LEN: usize = 100;
+pub const DEFAULT_PROMPT: &str = "$ ";
 
 pub struct CliBuilder<W: Write<Error = E>, E: Error, CommandBuffer: Buffer, HistoryBuffer: Buffer> {
-    command_buffer: CommandBuffer,
-    history_buffer: HistoryBuffer,
-    writer: W,
+    pub(crate) command_buffer: CommandBuffer,
+    pub(crate) history_buffer: HistoryBuffer,
+    pub(crate) prompt: &'static str,
+    pub(crate) writer: W,
 }
 
 impl<W, E, CommandBuffer, HistoryBuffer> Debug for CliBuilder<W, E, CommandBuffer, HistoryBuffer>
@@ -36,7 +38,7 @@ where
     HistoryBuffer: Buffer,
 {
     pub fn build(self) -> Result<Cli<W, E, CommandBuffer, HistoryBuffer>, E> {
-        Cli::new(self.writer, self.command_buffer, self.history_buffer)
+        Cli::from_builder(self)
     }
 
     pub fn command_buffer<B: Buffer>(
@@ -47,6 +49,7 @@ where
             command_buffer,
             history_buffer: self.history_buffer,
             writer: self.writer,
+            prompt: self.prompt,
         }
     }
 
@@ -58,6 +61,16 @@ where
             command_buffer: self.command_buffer,
             history_buffer,
             writer: self.writer,
+            prompt: self.prompt,
+        }
+    }
+
+    pub fn prompt(self, prompt: &'static str) -> Self {
+        CliBuilder {
+            command_buffer: self.command_buffer,
+            history_buffer: self.history_buffer,
+            writer: self.writer,
+            prompt,
         }
     }
 
@@ -69,6 +82,7 @@ where
             command_buffer: self.command_buffer,
             history_buffer: self.history_buffer,
             writer,
+            prompt: self.prompt,
         }
     }
 }
@@ -81,6 +95,7 @@ impl Default
             command_buffer: [0; DEFAULT_CMD_LEN],
             history_buffer: [0; DEFAULT_HISTORY_LEN],
             writer: EmptyWriter,
+            prompt: DEFAULT_PROMPT,
         }
     }
 }

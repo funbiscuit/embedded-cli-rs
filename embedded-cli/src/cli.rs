@@ -7,6 +7,7 @@ use core::marker::PhantomData;
 
 use crate::{
     buffer::Buffer,
+    builder::DEFAULT_PROMPT,
     codes,
     command::RawCommand,
     editor::Editor,
@@ -27,9 +28,8 @@ use crate::history::History;
 
 use embedded_io::{Error, Write};
 
-const PROMPT: &str = "$ ";
-
 pub struct CliHandle<'a, W: Write<Error = E>, E: embedded_io::Error> {
+    new_prompt: Option<&'static str>,
     writer: Writer<'a, W, E>,
 }
 
@@ -38,12 +38,20 @@ where
     W: Write<Error = E>,
     E: embedded_io::Error,
 {
+    /// Set new prompt to use in CLI
+    pub fn set_prompt(&mut self, prompt: &'static str) {
+        self.new_prompt = Some(prompt)
+    }
+
     pub fn writer(&mut self) -> &mut Writer<'a, W, E> {
         &mut self.writer
     }
 
     fn new(writer: Writer<'a, W, E>) -> Self {
-        Self { writer }
+        Self {
+            new_prompt: None,
+            writer,
+        }
     }
 }
 
@@ -104,6 +112,7 @@ where
     HistoryBuffer: Buffer,
 {
     #[allow(unused_variables)]
+    #[deprecated(since = "0.2.1", note = "please use `builder` instead")]
     pub fn new(
         writer: W,
         command_buffer: CommandBuffer,
@@ -114,8 +123,27 @@ where
             #[cfg(feature = "history")]
             history: History::new(history_buffer),
             input_generator: Some(InputGenerator::new()),
-            prompt: PROMPT,
+            prompt: DEFAULT_PROMPT,
             writer,
+            #[cfg(not(feature = "history"))]
+            _ph: PhantomData,
+        };
+
+        cli.writer.flush_str(cli.prompt)?;
+
+        Ok(cli)
+    }
+
+    pub(crate) fn from_builder(
+        builder: CliBuilder<W, E, CommandBuffer, HistoryBuffer>,
+    ) -> Result<Self, E> {
+        let mut cli = Self {
+            editor: Some(Editor::new(builder.command_buffer)),
+            #[cfg(feature = "history")]
+            history: History::new(builder.history_buffer),
+            input_generator: Some(InputGenerator::new()),
+            prompt: builder.prompt,
+            writer: builder.writer,
             #[cfg(not(feature = "history"))]
             _ph: PhantomData,
         };
@@ -153,6 +181,21 @@ where
         } else {
             Ok(())
         }
+    }
+
+    /// Set new prompt to use in CLI
+    ///
+    /// Changes will apply immediately and current line
+    /// will be replaced by new prompt and input
+    pub fn set_prompt(&mut self, prompt: &'static str) -> Result<(), E> {
+        self.prompt = prompt;
+        self.clear_line(false)?;
+
+        if let Some(editor) = self.editor.as_mut() {
+            self.writer.flush_str(editor.text())?;
+        }
+
+        Ok(())
     }
 
     pub fn write(
@@ -321,6 +364,9 @@ where
 
         let res = handler.process(&mut handle, command);
 
+        if let Some(prompt) = handle.new_prompt {
+            self.prompt = prompt;
+        }
         if handle.writer.is_dirty() {
             self.writer.write_str(codes::CRLF)?;
         }

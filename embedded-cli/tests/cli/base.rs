@@ -1,3 +1,5 @@
+use rstest::rstest;
+
 use crate::wrapper::{Arg, CliWrapper, RawCommand};
 
 use crate::terminal::assert_terminal;
@@ -83,6 +85,102 @@ fn move_insert() {
         cli.received_commands(),
         vec![Ok(RawCommand {
             name: "sup-edt".to_string(),
+            args: vec![],
+        })]
+    );
+}
+
+#[rstest]
+#[case("#")]
+#[case("###> ")]
+#[case("")]
+fn set_prompt_dynamic(#[case] prompt: &'static str) {
+    let mut cli = CliWrapper::default();
+    assert_terminal!(cli.terminal(), 2, vec!["$"]);
+
+    cli.set_prompt(prompt);
+    assert_terminal!(cli.terminal(), prompt.len(), vec![prompt.trim()]);
+
+    cli.set_prompt("$ ");
+    assert_terminal!(cli.terminal(), 2, vec!["$"]);
+
+    cli.set_prompt(prompt);
+    assert_terminal!(cli.terminal(), prompt.len(), vec![prompt.trim()]);
+
+    cli.process_str("set");
+    assert_terminal!(
+        cli.terminal(),
+        prompt.len() + 3,
+        vec![format!("{}set", prompt)]
+    );
+
+    cli.set_prompt("$ ");
+    assert_terminal!(cli.terminal(), 5, vec!["$ set"]);
+
+    cli.set_handler(move |cli, _| {
+        cli.set_prompt(prompt);
+        Ok(())
+    });
+    cli.send_enter();
+    assert_terminal!(cli.terminal(), prompt.len(), vec!["$ set", prompt.trim()]);
+
+    cli.set_handler(move |cli, _| {
+        cli.set_prompt("$ ");
+        Ok(())
+    });
+    cli.process_str("get");
+    cli.send_enter();
+    assert_terminal!(
+        cli.terminal(),
+        2,
+        vec![
+            "$ set".to_string(),
+            format!("{}get", prompt),
+            "$".to_string()
+        ]
+    );
+
+    assert_eq!(
+        cli.received_commands(),
+        vec![
+            Ok(RawCommand {
+                name: "set".to_string(),
+                args: vec![],
+            }),
+            Ok(RawCommand {
+                name: "get".to_string(),
+                args: vec![],
+            })
+        ]
+    );
+}
+
+#[rstest]
+#[case("#")]
+#[case("###> ")]
+#[case("")]
+fn set_prompt_static(#[case] prompt: &'static str) {
+    let mut cli = CliWrapper::builder().prompt(prompt).build();
+    assert_terminal!(cli.terminal(), prompt.len(), vec![prompt.trim_end()]);
+
+    cli.process_str("set");
+    assert_terminal!(
+        cli.terminal(),
+        prompt.len() + 3,
+        vec![format!("{}set", prompt)]
+    );
+
+    cli.send_enter();
+    assert_terminal!(
+        cli.terminal(),
+        prompt.len(),
+        vec![format!("{}set", prompt), prompt.trim().to_string()]
+    );
+
+    assert_eq!(
+        cli.received_commands(),
+        vec![Ok(RawCommand {
+            name: "set".to_string(),
             args: vec![],
         })]
     );

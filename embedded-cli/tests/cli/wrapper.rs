@@ -1,4 +1,4 @@
-use std::{cell::RefCell, convert::Infallible, fmt::Debug, rc::Rc};
+use std::{cell::RefCell, convert::Infallible, fmt::Debug, marker::PhantomData, rc::Rc};
 
 use embedded_cli::{
     arguments::{Arg as CliArg, ArgError},
@@ -207,8 +207,17 @@ impl Default for CliWrapper<RawCommand> {
 }
 
 impl<T: Autocomplete + Help + CommandConvert + Clone> CliWrapper<T> {
+    pub fn builder() -> CliWrapperBuilder<T> {
+        CliWrapperBuilder {
+            command_size: 80,
+            history_size: 500,
+            prompt: None,
+            _ph: PhantomData,
+        }
+    }
+
     pub fn new() -> Self {
-        Self::new_with_sizes(80, 500)
+        Self::builder().build()
     }
 
     pub fn process_str(&mut self, text: &str) {
@@ -260,6 +269,11 @@ impl<T: Autocomplete + Help + CommandConvert + Clone> CliWrapper<T> {
         self.handler = Some(Box::new(handler));
     }
 
+    pub fn set_prompt(&mut self, prompt: &'static str) {
+        self.cli.set_prompt(prompt).unwrap();
+        self.update_terminal();
+    }
+
     pub fn received_commands(&self) -> Vec<Result<T, ParseError>> {
         self.state.borrow().commands.to_vec()
     }
@@ -273,7 +287,23 @@ impl<T: Autocomplete + Help + CommandConvert + Clone> CliWrapper<T> {
         self.update_terminal();
     }
 
-    fn new_with_sizes(command_size: usize, history_size: usize) -> Self {
+    fn update_terminal(&mut self) {
+        for byte in self.state.borrow_mut().written.drain(..) {
+            self.terminal.receive_byte(byte)
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct CliWrapperBuilder<T: Autocomplete + Help + CommandConvert + Clone> {
+    command_size: usize,
+    history_size: usize,
+    prompt: Option<&'static str>,
+    _ph: PhantomData<T>,
+}
+
+impl<T: Autocomplete + Help + CommandConvert + Clone> CliWrapperBuilder<T> {
+    pub fn build(self) -> CliWrapper<T> {
         let state = Rc::new(RefCell::new(State::default()));
 
         let writer = Writer {
@@ -281,15 +311,19 @@ impl<T: Autocomplete + Help + CommandConvert + Clone> CliWrapper<T> {
         };
 
         //TODO: impl Buffer for Vec so no need to leak
-        let cli = CliBuilder::default()
+        let builder = CliBuilder::default()
             .writer(writer)
-            .command_buffer(vec![0; command_size].leak())
-            .history_buffer(vec![0; history_size].leak())
-            .build()
-            .unwrap();
+            .command_buffer(vec![0; self.command_size].leak())
+            .history_buffer(vec![0; self.history_size].leak());
+        let builder = if let Some(prompt) = self.prompt {
+            builder.prompt(prompt)
+        } else {
+            builder
+        };
+        let cli = builder.build().unwrap();
 
         let terminal = Terminal::new();
-        let mut wrapper = Self {
+        let mut wrapper = CliWrapper {
             cli,
             handler: None,
             state,
@@ -299,10 +333,9 @@ impl<T: Autocomplete + Help + CommandConvert + Clone> CliWrapper<T> {
         wrapper
     }
 
-    fn update_terminal(&mut self) {
-        for byte in self.state.borrow_mut().written.drain(..) {
-            self.terminal.receive_byte(byte)
-        }
+    pub fn prompt(mut self, prompt: &'static str) -> Self {
+        self.prompt = Some(prompt);
+        self
     }
 }
 
