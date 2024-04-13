@@ -47,7 +47,8 @@ fn write_from_service() {
 
     assert_terminal!(cli.terminal(), 2, vec!["$"]);
 
-    cli.process_str("set 123\n");
+    cli.process_str("set 123");
+    cli.send_enter();
 
     assert_terminal!(
         cli.terminal(),

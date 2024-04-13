@@ -23,11 +23,12 @@ impl CommandConvert for TestCommand {
 fn complete_when_single_variant() {
     let mut cli = CliWrapper::new();
 
-    cli.process_str("e\t");
+    cli.process_str("e");
+    cli.send_tab();
 
     assert_terminal!(cli.terminal(), 7, vec!["$ exit"]);
 
-    cli.process_str("\n");
+    cli.send_enter();
 
     assert_eq!(cli.received_commands(), vec![Ok(TestCommand::Exit)]);
 
@@ -38,15 +39,17 @@ fn complete_when_single_variant() {
 fn complete_when_multiple_variants() {
     let mut cli = CliWrapper::new();
 
-    cli.process_str("g\t");
+    cli.process_str("g");
+    cli.send_tab();
 
     assert_terminal!(cli.terminal(), 6, vec!["$ get-"]);
 
-    cli.process_str("a\t");
+    cli.process_str("a");
+    cli.send_tab();
 
     assert_terminal!(cli.terminal(), 10, vec!["$ get-adc"]);
 
-    cli.process_str("\n");
+    cli.send_enter();
     assert_terminal!(cli.terminal(), 2, vec!["$ get-adc", "$"]);
     assert_eq!(cli.received_commands(), vec![Ok(TestCommand::GetAdc)]);
 }
@@ -55,11 +58,12 @@ fn complete_when_multiple_variants() {
 fn complete_when_name_finished() {
     let mut cli = CliWrapper::new();
 
-    cli.process_str("exit\t");
+    cli.process_str("exit");
+    cli.send_tab();
 
     assert_terminal!(cli.terminal(), 7, vec!["$ exit"]);
 
-    cli.process_str("\n");
+    cli.send_enter();
 
     assert_eq!(cli.received_commands(), vec![Ok(TestCommand::Exit)]);
 }
@@ -68,11 +72,12 @@ fn complete_when_name_finished() {
 fn complete_with_leading_spaces() {
     let mut cli = CliWrapper::new();
 
-    cli.process_str("  ex\t");
+    cli.process_str("  ex");
+    cli.send_tab();
 
     assert_terminal!(cli.terminal(), 9, vec!["$   exit"]);
 
-    cli.process_str("\n");
+    cli.send_enter();
 
     assert_eq!(cli.received_commands(), vec![Ok(TestCommand::Exit)]);
 }
@@ -81,7 +86,8 @@ fn complete_with_leading_spaces() {
 fn complete_with_trailing_spaces() {
     let mut cli = CliWrapper::<TestCommand>::new();
 
-    cli.process_str("ex \t");
+    cli.process_str("ex ");
+    cli.send_tab();
 
     assert_terminal!(cli.terminal(), 5, vec!["$ ex"]);
 }
