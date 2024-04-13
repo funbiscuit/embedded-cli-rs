@@ -18,7 +18,7 @@ embedded-io = "0.6.1"
 panic-halt = "0.2.0"
 ufmt = "0.2.0"
 nb = "1.1.0"
-embedded-hal = "0.2.3"
+embedded-hal = "1.0.0"
 
 [dependencies.arduino-hal]
 git = "https://github.com/rahix/avr-hal"
