@@ -12,13 +12,13 @@ enum CliTestCommand<'a> {
         #[arg(short, long)]
         name: Option<&'a str>,
 
-        #[arg(long = "conf")]
+        #[arg(long = "конф")]
         config: &'a str,
 
         #[arg(short)]
         level: u8,
 
-        #[arg(short = 'V', long)]
+        #[arg(short = 'Ю', long)]
         verbose: bool,
 
         file: &'a str,
@@ -63,28 +63,28 @@ impl<'a> From<CliTestCommand<'a>> for TestCommand {
 }
 
 #[rstest]
-#[case("cmd --name test-name --conf config -l 5 -V some-file", TestCommand::Cmd {
+#[case("cmd --name test-name --конф config -l 5 -Ю some-file", TestCommand::Cmd {
     name: Some("test-name".to_string()),
     config: "config".to_string(),
     level: 5,
     verbose: true,
     file: "some-file".to_string(),
 })]
-#[case("cmd --conf config -l 35 --verbose some-file", TestCommand::Cmd {
+#[case("cmd --конф config -l 35 --verbose some-file", TestCommand::Cmd {
     name: None,
     config: "config".to_string(),
     level: 35,
     verbose: true,
     file: "some-file".to_string(),
 })]
-#[case("cmd --conf conf2 file -n name2 -Vl 25", TestCommand::Cmd {
+#[case("cmd --конф conf2 file -n name2 -Юl 25", TestCommand::Cmd {
     name: Some("name2".to_string()),
     config: "conf2".to_string(),
     level: 25,
     verbose: true,
     file: "file".to_string(),
 })]
-#[case("cmd file3 --conf conf3 -l 17", TestCommand::Cmd {
+#[case("cmd file3 --конф conf3 -l 17", TestCommand::Cmd {
     name: None,
     config: "conf3".to_string(),
     level: 17,

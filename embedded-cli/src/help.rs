@@ -16,7 +16,7 @@ impl<'a> HelpRequest<'a> {
         let mut args = command.args().args();
         if command.name() == "help" {
             match args.next() {
-                Some(Ok(Arg::Value(name))) => {
+                Some(Arg::Value(name)) => {
                     let command = RawCommand::new(name, args.into_args());
                     Some(HelpRequest::Command(command))
                 }
@@ -25,9 +25,7 @@ impl<'a> HelpRequest<'a> {
             }
         }
         // check if any other option is -h or --help
-        else if args
-            .any(|arg| arg == Ok(Arg::LongOption("help")) || arg == Ok(Arg::ShortOption('h')))
-        {
+        else if args.any(|arg| arg == Arg::LongOption("help") || arg == Arg::ShortOption('h')) {
             Some(HelpRequest::Command(command.clone()))
         } else {
             None

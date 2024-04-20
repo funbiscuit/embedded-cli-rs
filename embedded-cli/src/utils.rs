@@ -34,6 +34,40 @@ pub fn char_count(text: &str) -> usize {
     count
 }
 
+pub fn char_pop_front(text: &str) -> Option<(char, &str)> {
+    if text.is_empty() {
+        None
+    } else {
+        let bytes = text.as_bytes();
+        let first = bytes[0];
+
+        let mut codepoint = if first < 0x80 {
+            first as u32
+        } else if (first & 0xE0) == 0xC0 {
+            (first & 0x1F) as u32
+        } else {
+            (first & 0x0F) as u32
+        };
+
+        let mut bytes = &bytes[1..];
+        // go over all other bytes and add merge into codepoint
+        while !bytes.is_empty() && (bytes[0] & 0xC0) == 0x80 {
+            codepoint <<= 6;
+            codepoint |= bytes[0] as u32 & 0x3F;
+            bytes = &bytes[1..];
+        }
+
+        // SAFETY: after all modifications codepoint is valid u32 char
+        // and bytes contains valid utf-8 sequence
+        unsafe {
+            Some((
+                char::from_u32_unchecked(codepoint),
+                core::str::from_utf8_unchecked(bytes),
+            ))
+        }
+    }
+}
+
 /// Returns length (in bytes) of longest common prefix
 pub fn common_prefix_len(left: &str, right: &str) -> usize {
     let mut accum1 = Utf8Accum::default();
@@ -53,6 +87,45 @@ pub fn common_prefix_len(left: &str, right: &str) -> usize {
     }
 
     pos
+}
+
+/// Encodes given character as UTF-8 into the provided byte buffer,
+/// and then returns the subslice of the buffer that contains the encoded character.
+pub fn encode_utf8(ch: char, buf: &mut [u8]) -> &str {
+    let mut code = ch as u32;
+
+    if code < 0x80 {
+        buf[0] = ch as u8;
+        unsafe {
+            return core::str::from_utf8_unchecked(&buf[..1]);
+        }
+    }
+
+    let mut counter = if code < 0x800 {
+        // 2-byte char
+        1
+    } else if code < 0x10000 {
+        // 3-byte char
+        2
+    } else {
+        // 4-byte char
+        3
+    };
+
+    let first_b_mask = (0x780 >> counter) as u8;
+
+    let len = counter + 1;
+    while counter > 0 {
+        buf[counter] = ((code as u8) & 0b0011_1111) | 0b1000_0000;
+        code >>= 6;
+        counter -= 1;
+    }
+
+    buf[0] = code as u8 | first_b_mask;
+
+    unsafe {
+        return core::str::from_utf8_unchecked(&buf[..len]);
+    }
 }
 
 pub fn trim_start(input: &str) -> &str {
@@ -87,6 +160,7 @@ pub unsafe fn split_at_mut(buf: &mut [u8], mid: usize) -> (&mut [u8], &mut [u8])
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
+    use std::format;
 
     use crate::utils;
 
@@ -119,6 +193,28 @@ mod tests {
     #[case("abcd абв 佐佗佟𑿁 𑿆𑿌")]
     fn char_count(#[case] text: &str) {
         assert_eq!(utils::char_count(text), text.chars().count())
+    }
+
+    #[test]
+    fn char_pop_front() {
+        let text = "abcd абв 佐佗佟𑿁 𑿆𑿌";
+        for (i, ch) in text.char_indices() {
+            let (popped_ch, left) = utils::char_pop_front(&text[i..]).unwrap();
+            assert_eq!(popped_ch, ch);
+            assert_eq!(&text[i..], format!("{}{}", ch, left).as_str());
+        }
+        assert!(utils::char_pop_front("").is_none())
+    }
+
+    #[test]
+    fn char_encode() {
+        let text = "abcd абв 佐佗佟𑿁 𑿆𑿌";
+        for ch in text.chars() {
+            let mut buf1 = [0; 4];
+            let mut buf2 = [0; 4];
+            assert_eq!(ch.encode_utf8(&mut buf1), utils::encode_utf8(ch, &mut buf2));
+        }
+        assert!(utils::char_pop_front("").is_none())
     }
 
     #[rstest]

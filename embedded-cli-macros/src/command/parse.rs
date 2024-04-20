@@ -246,9 +246,6 @@ fn create_arg_parsing(command: &Command) -> (TokenStream, Vec<TokenStream>) {
 
         let mut args = command.args().args();
         while let Some(arg) = args.next() {
-            let arg = arg.map_err(|err| match err {
-                _cli::arguments::ArgError::NonAsciiShortOption => _cli::service::ParseError::NonAsciiShortOption
-            })?;
             match arg {
                 #(#option_name_arms)*
                 #(#option_value_arms)*

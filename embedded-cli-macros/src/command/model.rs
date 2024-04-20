@@ -154,23 +154,11 @@ impl CommandArg {
             ShortName::Generated => field_name.chars().next().unwrap(),
             ShortName::Fixed(c) => c,
         });
-        if let Some(short) = short {
-            if !short.is_ascii_alphabetic() {
-                return Err(Error::custom("Flag char must be alphabetic ASCII"));
-            }
-        }
 
         let long = arg_attrs.long.map(|s| match s {
             LongName::Generated => field_name.from_case(Case::Snake).to_case(Case::Kebab),
             LongName::Fixed(name) => name,
         });
-        if let Some(long) = &long {
-            if long.chars().any(|c| !c.is_ascii_alphanumeric() && c != '-') {
-                return Err(Error::custom(
-                    "Option name must consist of alphanumeric ASCII chars",
-                ));
-            }
-        }
 
         let aa = TypedArg::new(&field.ty);
 

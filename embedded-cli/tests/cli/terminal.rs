@@ -87,7 +87,13 @@ impl Terminal {
                                     current.push(' ');
                                 }
                             }
-                            current.insert(cursor, c);
+                            if let Some((insert_pos, _)) =
+                                current.char_indices().skip(cursor).next()
+                            {
+                                current.insert(insert_pos, c);
+                            } else {
+                                current.push(c);
+                            }
                             cursor += 1;
                         }
                         _ => unimplemented!(),

@@ -14,6 +14,7 @@ use crate::{
     input::{ControlInput, Input, InputGenerator},
     service::{Autocomplete, CommandProcessor, Help, ParseError, ProcessError},
     token::Tokens,
+    utils,
     writer::{WriteExt, Writer},
 };
 
@@ -404,10 +405,6 @@ where
                 self.writer.write_str("missing required argument: ")?;
                 self.writer.write_str(name)?;
             }
-            ParseError::NonAsciiShortOption => {
-                self.writer
-                    .write_str("non-ascii in short options is not supported")?;
-            }
             ParseError::ParseValueError { value, expected } => {
                 self.writer.write_str("failed to parse '")?;
                 self.writer.write_str(value)?;
@@ -424,11 +421,10 @@ where
                 self.writer.write_str(name)?;
             }
             ParseError::UnexpectedShortOption { name } => {
-                // short options are guaranteed to be ascii alphabetic
-                if name.is_ascii_alphabetic() {
-                    self.writer.write_str("unexpected option: -")?;
-                    self.writer.write_bytes(&[name as u8])?;
-                }
+                let mut buf = [0; 4];
+                let buf = utils::encode_utf8(name, &mut buf);
+                self.writer.write_str("unexpected option: -")?;
+                self.writer.write_str(buf)?;
             }
             ParseError::UnknownCommand => {
                 self.writer.write_str("unknown command")?;

@@ -199,7 +199,7 @@ fn create_command_help(command: &Command) -> TokenStream {
                 let mut state = States::Normal;
 
                 let mut args = command.args().args();
-                while let Some(Ok(arg)) = args.next() {
+                while let Some(arg) = args.next() {
                     match arg {
                         #(#option_name_arms)*
                         #(#option_value_arms)*

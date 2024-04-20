@@ -22,8 +22,6 @@ pub enum ParseError<'a> {
         name: &'a str,
     },
 
-    NonAsciiShortOption,
-
     ParseValueError {
         value: &'a str,
         expected: &'static str,

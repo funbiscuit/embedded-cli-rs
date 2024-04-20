@@ -15,37 +15,43 @@ impl Utf8Accum {
         // Plain and stupid utf-8 validation
         // Bytes are supposed to be human input so it's okay to be not blazing fast
 
-        if byte <= 0x7F {
-            self.partial = 0;
-            self.expected = 0;
-            self.buffer[0] = byte;
-            // SAFETY: ascii chars are all valid utf-8 chars
-            return Some(unsafe { core::str::from_utf8_unchecked(&self.buffer[..1]) });
-        } else if (0xC0..=0xDF).contains(&byte) {
-            // this is first octet of 2-byte value
-            self.buffer[0] = byte;
-            self.partial = 1;
-            self.expected = 1;
-        } else if (0xE0..=0xEF).contains(&byte) {
-            // this is first octet of 3-byte value
-            self.buffer[0] = byte;
-            self.partial = 1;
-            self.expected = 2;
-        } else if (0xF0..=0xF7).contains(&byte) {
+        if byte >= 0xF8 {
+            return None;
+        } else if byte >= 0xF0 {
             // this is first octet of 4-byte value
             self.buffer[0] = byte;
             self.partial = 1;
             self.expected = 3;
-        } else if (0x80..=0xBF).contains(&byte) && self.expected > 0 {
-            // this is one of other octets of multi-byte value
-            self.buffer[self.partial as usize] = byte;
-            self.partial += 1;
-            self.expected -= 1;
-            if self.expected == 0 {
-                let len = self.partial as usize;
-                self.partial = 0;
-                // SAFETY: we checked previously that buffer contains valid utf8
-                return Some(unsafe { core::str::from_utf8_unchecked(&self.buffer[..len]) });
+        } else if byte >= 0xE0 {
+            // this is first octet of 3-byte value
+            self.buffer[0] = byte;
+            self.partial = 1;
+            self.expected = 2;
+        } else if byte >= 0xC0 {
+            // this is first octet of 2-byte value
+            self.buffer[0] = byte;
+            self.partial = 1;
+            self.expected = 1;
+        } else if byte >= 0x80 {
+            if self.expected > 0 {
+                // this is one of other octets of multi-byte value
+                self.buffer[self.partial as usize] = byte;
+                self.partial += 1;
+                self.expected -= 1;
+                if self.expected == 0 {
+                    let len = self.partial as usize;
+                    // SAFETY: we checked previously that buffer contains valid utf8
+                    unsafe {
+                        return Some(core::str::from_utf8_unchecked(&self.buffer[..len]));
+                    }
+                }
+            }
+        } else {
+            self.expected = 0;
+            self.buffer[0] = byte;
+            // SAFETY: ascii chars are all valid utf-8 chars
+            unsafe {
+                return Some(core::str::from_utf8_unchecked(&self.buffer[..1]));
             }
         }
 

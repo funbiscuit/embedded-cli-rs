@@ -1,4 +1,7 @@
-use crate::token::{Tokens, TokensIter};
+use crate::{
+    token::{Tokens, TokensIter},
+    utils,
+};
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Arg<'a> {
@@ -13,8 +16,7 @@ pub enum Arg<'a> {
     /// `--config` will be a long option with name `config`
     LongOption(&'a str),
 
-    /// Short option. Only single ASCII char is stored (without `-`).
-    /// UTF-8 here is not supported.
+    /// Short option. Only single UTF-8 char is stored (without `-`).
     ///
     /// In `get --config normal -f file -vs`
     /// `-f` and `-vs` will be short options.
@@ -50,18 +52,13 @@ impl<'a> PartialEq for ArgList<'a> {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ArgError {
-    NonAsciiShortOption,
-}
-
 #[derive(Debug)]
 pub struct ArgsIter<'a> {
     values_only: bool,
 
-    /// Short options (ASCII chars) that
+    /// Short options (utf8 chars) that
     /// are left from previous iteration
-    leftover: &'a [u8],
+    leftover: &'a str,
 
     tokens: TokensIter<'a>,
 }
@@ -70,7 +67,7 @@ impl<'a> ArgsIter<'a> {
     fn new(tokens: TokensIter<'a>) -> Self {
         Self {
             values_only: false,
-            leftover: &[],
+            leftover: "",
             tokens,
         }
     }
@@ -85,31 +82,19 @@ impl<'a> ArgsIter<'a> {
 }
 
 impl<'a> Iterator for ArgsIter<'a> {
-    type Item = Result<Arg<'a>, ArgError>;
+    type Item = Arg<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        fn process_leftover<'a>(byte: u8) -> Result<Arg<'a>, ArgError> {
-            if byte.is_ascii_alphabetic() {
-                // SAFETY: we checked that this is alphabetic ASCII
-                Ok(Arg::ShortOption(unsafe {
-                    char::from_u32_unchecked(byte as u32)
-                }))
-            } else {
-                Err(ArgError::NonAsciiShortOption)
-            }
-        }
-
-        if !self.leftover.is_empty() {
-            let byte = self.leftover[0];
-            self.leftover = &self.leftover[1..];
-            return Some(process_leftover(byte));
+        if let Some((opt, leftover)) = utils::char_pop_front(self.leftover) {
+            self.leftover = leftover;
+            return Some(Arg::ShortOption(opt));
         }
 
         let raw = self.tokens.next()?;
         let bytes = raw.as_bytes();
 
         if self.values_only {
-            return Some(Ok(Arg::Value(raw)));
+            return Some(Arg::Value(raw));
         }
 
         let token = if bytes.len() > 1 && bytes[0] == b'-' {
@@ -121,14 +106,17 @@ impl<'a> Iterator for ArgsIter<'a> {
                     Arg::LongOption(unsafe { raw.get_unchecked(2..) })
                 }
             } else {
-                self.leftover = &bytes[2..];
-                return Some(process_leftover(bytes[1]));
+                let (opt, leftover) =
+                    unsafe { utils::char_pop_front(raw.get_unchecked(1..)).unwrap_unchecked() };
+                self.leftover = leftover;
+
+                return Some(Arg::ShortOption(opt));
             }
         } else {
             Arg::Value(raw)
         };
 
-        Some(Ok(token))
+        Some(token)
     }
 }
 
@@ -176,36 +164,35 @@ mod tests {
 
     use crate::{arguments::ArgList, token::Tokens};
 
-    use super::{Arg, ArgError};
+    use super::Arg;
 
     #[rstest]
     #[case("arg1 --option1 val1 -f val2 -vs", &[
-        Ok(Arg::Value("arg1")), 
-        Ok(Arg::LongOption("option1")),
-        Ok(Arg::Value("val1")),
-        Ok(Arg::ShortOption('f')),
-        Ok(Arg::Value("val2")),
-        Ok(Arg::ShortOption('v')),
-        Ok(Arg::ShortOption('s')),
+        Arg::Value("arg1"),
+        Arg::LongOption("option1"),
+        Arg::Value("val1"),
+        Arg::ShortOption('f'),
+        Arg::Value("val2"),
+        Arg::ShortOption('v'),
+        Arg::ShortOption('s'),
     ])]
     #[case("arg1 --option1 -- val1 -f val2 -vs", &[
-        Ok(Arg::Value("arg1")),
-        Ok(Arg::LongOption("option1")),
-        Ok(Arg::DoubleDash),
-        Ok(Arg::Value("val1")),
-        Ok(Arg::Value("-f")),
-        Ok(Arg::Value("val2")),
-        Ok(Arg::Value("-vs")),
+        Arg::Value("arg1"),
+        Arg::LongOption("option1"),
+        Arg::DoubleDash,
+        Arg::Value("val1"),
+        Arg::Value("-f"),
+        Arg::Value("val2"),
+        Arg::Value("-vs"),
     ])]
-    #[case("arg1 -бjв", &[
-        Ok(Arg::Value("arg1")),
-        Err(ArgError::NonAsciiShortOption),
-        Err(ArgError::NonAsciiShortOption),
-        Ok(Arg::ShortOption('j')),
-        Err(ArgError::NonAsciiShortOption),
-        Err(ArgError::NonAsciiShortOption),
+    #[case("arg1 -бj佗𑿌", &[
+        Arg::Value("arg1"),
+        Arg::ShortOption('б'),
+        Arg::ShortOption('j'),
+        Arg::ShortOption('佗'),
+        Arg::ShortOption('𑿌'),
     ])]
-    fn arg_tokens(#[case] input: &str, #[case] expected: &[Result<Arg<'_>, ArgError>]) {
+    fn arg_tokens(#[case] input: &str, #[case] expected: &[Arg<'_>]) {
         let mut input = input.as_bytes().to_vec();
         let input = core::str::from_utf8_mut(&mut input).unwrap();
         let tokens = Tokens::new(input);

@@ -26,7 +26,7 @@ fn simple_input() {
         cli.received_commands(),
         vec![Ok(RawCommand {
             name: "set".to_string(),
-            args: vec![Ok(Arg::Value("led".to_string()))],
+            args: vec![Arg::Value("led".to_string())],
         })]
     );
 }
