@@ -115,7 +115,11 @@ impl<B: Buffer> Editor<B> {
         } else {
             self.valid
         };
-        self.buffer.as_slice_mut()[cursor..cursor + text.len()].copy_from_slice(text);
+        // SAFETY: we checked that buffer contains len bytes after cursor
+        // and two buffers do not overlap since mutable reference to buffer is exclusive
+        unsafe {
+            utils::copy_nonoverlapping(text, &mut self.buffer.as_slice_mut()[cursor..], text.len());
+        }
         let text = &self.buffer.as_slice()[cursor..cursor + text.len()];
         self.cursor += chars;
         self.valid += text.len();

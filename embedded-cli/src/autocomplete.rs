@@ -82,7 +82,11 @@ impl<'a> Autocompletion<'a> {
         } else {
             self.partial =
                 self.partial || len < autocompletion.len() || self.autocompleted.is_some();
-            self.buffer[..len].copy_from_slice(&autocompletion.as_bytes()[..len]);
+            // SAFETY: we checked that len is no longer than buffer len (and is at most autocompleted len)
+            // and these two buffers do not overlap since mutable reference to buffer is exclusive
+            unsafe {
+                utils::copy_nonoverlapping(autocompletion.as_bytes(), self.buffer, len);
+            }
             self.autocompleted = Some(len);
         };
     }

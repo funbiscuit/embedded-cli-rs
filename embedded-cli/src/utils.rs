@@ -136,6 +136,21 @@ pub fn trim_start(input: &str) -> &str {
     }
 }
 
+/// Copies content from one slice to another (equivalent of memcpy)
+///
+/// # Safety
+/// Length of both slices must be at least `len`
+pub unsafe fn copy_nonoverlapping(src: &[u8], dst: &mut [u8], len: usize) {
+    debug_assert!(src.len() >= len);
+    debug_assert!(dst.len() >= len);
+
+    // SAFETY: Caller has to check that slices have len bytes
+    // and two buffers can't overlap since mutable ref is exlusive
+    unsafe {
+        core::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), len);
+    }
+}
+
 /// Splits given mutable slice into two parts
 ///
 /// # Safety

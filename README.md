@@ -332,14 +332,14 @@ Memory usage might change in future versions, but I'll try to keep this table up
 
 | Features                        | ROM, bytes | Static RAM, bytes |
 |---------------------------------|:----------:|:-----------------:|
-|                                 |   10120    |        274        |
-| `autocomplete`                  |   12116    |        290        |
-| `history`                       |   12406    |        315        |
-| `autocomplete` `history`        |   13704    |        331        |
-| `help`                          |   14216    |        544        |
-| `autocomplete` `help`           |   15290    |        556        |
-| `history` `help`                |   16488    |        585        |
-| `autocomplete` `history` `help` |   16594    |        597        |
+|                                 |   10182    |        274        |
+| `autocomplete`                  |   12112    |        290        |
+| `history`                       |   12032    |        315        |
+| `autocomplete` `history`        |   13586    |        331        |
+| `help`                          |   14412    |        544        |
+| `autocomplete` `help`           |   16110    |        556        |
+| `history` `help`                |   16402    |        585        |
+| `autocomplete` `history` `help` |   16690    |        597        |
 
 This table is generated using this [script](examples/arduino/memory.sh).
 As table shows, enabling help adds quite a lot to memory usage since help usually requires a lot of text to be stored.

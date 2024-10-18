@@ -1,4 +1,4 @@
-use crate::buffer::Buffer;
+use crate::{buffer::Buffer, utils};
 
 #[derive(Debug)]
 pub struct History<B: Buffer> {
@@ -152,7 +152,15 @@ impl<B: Buffer> History<B> {
 
         // now we have enough space after self.used to insert element
         let null_pos = self.used + text.len();
-        self.buffer.as_slice_mut()[self.used..null_pos].copy_from_slice(text.as_bytes());
+        // SAFETY: we ensured that buffer contains len + 1 bytes after self.used position
+        // and two buffers do not overlap since mutable reference to buffer is exclusive
+        unsafe {
+            utils::copy_nonoverlapping(
+                text.as_bytes(),
+                &mut self.buffer.as_slice_mut()[self.used..],
+                text.len(),
+            );
+        }
         self.buffer.as_slice_mut()[null_pos] = 0;
         self.used += text.len() + 1;
     }
