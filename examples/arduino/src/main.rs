@@ -214,6 +214,7 @@ fn try_run() -> Option<()> {
     let (command_buffer, history_buffer) = unsafe {
         static mut COMMAND_BUFFER: [u8; 40] = [0; 40];
         static mut HISTORY_BUFFER: [u8; 41] = [0; 41];
+        #[allow(static_mut_refs)]
         (COMMAND_BUFFER.as_mut(), HISTORY_BUFFER.as_mut())
     };
     let mut cli = CliBuilder::default()

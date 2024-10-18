@@ -127,13 +127,13 @@ pub struct FromArgumentError<'a> {
 }
 
 pub trait FromArgument<'a> {
-    fn from_arg(arg: &'a str) -> Result<Self, FromArgumentError<'_>>
+    fn from_arg(arg: &'a str) -> Result<Self, FromArgumentError<'a>>
     where
         Self: Sized;
 }
 
 impl<'a> FromArgument<'a> for &'a str {
-    fn from_arg(arg: &'a str) -> Result<Self, FromArgumentError<'_>> {
+    fn from_arg(arg: &'a str) -> Result<Self, FromArgumentError<'a>> {
         Ok(arg)
     }
 }
@@ -141,7 +141,7 @@ impl<'a> FromArgument<'a> for &'a str {
 macro_rules! impl_arg_fromstr {
     ($id:ident) => (
         impl<'a> FromArgument<'a> for $id {
-            fn from_arg(arg: &'a str) -> Result<Self, FromArgumentError<'_>> {
+            fn from_arg(arg: &'a str) -> Result<Self, FromArgumentError<'a>> {
                 arg.parse().map_err(|_| FromArgumentError {
                     value: arg,
                     expected: stringify!($id),
