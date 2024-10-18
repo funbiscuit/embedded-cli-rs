@@ -171,7 +171,27 @@ fn main() {
 
     let writer = Writer { stdout };
 
-    let mut cli = CliBuilder::default().writer(writer).build().unwrap();
+    const CMD_BUFFER_SIZE: usize = 1024;
+    const HISTORY_BUFFER_SIZE: usize = 2048;
+
+    // Creating static buffers for command history to avoid using stack memory
+    let (command_buffer, history_buffer) = unsafe {
+        static mut COMMAND_BUFFER: [u8; CMD_BUFFER_SIZE] = [0; CMD_BUFFER_SIZE];
+        static mut HISTORY_BUFFER: [u8; HISTORY_BUFFER_SIZE] = [0; HISTORY_BUFFER_SIZE];
+        #[allow(static_mut_refs)]
+        (COMMAND_BUFFER.as_mut(), HISTORY_BUFFER.as_mut())
+    };
+
+    // Setup CLI with command buffer, history buffer, and a writer for output
+    let mut cli = CliBuilder::default()
+        .writer(writer)
+        .command_buffer(command_buffer)
+        .history_buffer(history_buffer)
+        .build()
+        .expect("Failed to build CLI");
+
+    // Setting the CLI prompt
+    let _ = cli.set_prompt("main$ ");
 
     // Create global state, that will be used for entire application
     let mut state = AppState {
