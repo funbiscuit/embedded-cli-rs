@@ -1,5 +1,6 @@
 pub use crate::builder::CliBuilder;
 
+use bitflags::bitflags;
 use core::fmt::Debug;
 
 #[cfg(not(feature = "history"))]
@@ -7,12 +8,11 @@ use core::marker::PhantomData;
 
 use crate::{
     buffer::Buffer,
-    builder::DEFAULT_PROMPT,
     codes,
     command::RawCommand,
     editor::Editor,
     input::{ControlInput, Input, InputGenerator},
-    service::{Autocomplete, CommandProcessor, Help, ParseError, ProcessError},
+    service::{Autocomplete, FromRaw, Help, ParseError},
     token::Tokens,
     utils,
     writer::{WriteExt, Writer},
@@ -30,7 +30,8 @@ use crate::history::History;
 use embedded_io::{Error, Write};
 
 pub struct CliHandle<'a, W: Write<Error = E>, E: embedded_io::Error> {
-    new_prompt: Option<&'static str>,
+    dropped_error: &'a mut Option<E>,
+    prompt: &'a mut &'static str,
     writer: Writer<'a, W, E>,
 }
 
@@ -41,18 +42,31 @@ where
 {
     /// Set new prompt to use in CLI
     pub fn set_prompt(&mut self, prompt: &'static str) {
-        self.new_prompt = Some(prompt)
+        *self.prompt = prompt;
     }
 
     pub fn writer(&mut self) -> &mut Writer<'a, W, E> {
         &mut self.writer
     }
 
-    fn new(writer: Writer<'a, W, E>) -> Self {
+    fn new(
+        dropped_error: &'a mut Option<E>,
+        prompt: &'a mut &'static str,
+        writer: Writer<'a, W, E>,
+    ) -> Self {
         Self {
-            new_prompt: None,
+            dropped_error,
+            prompt,
             writer,
         }
+    }
+
+    fn cleanup(&mut self) -> Result<(), E> {
+        if self.writer.is_dirty() {
+            self.writer.write_str(codes::CRLF)?;
+        }
+        self.writer.write_str(self.prompt)?;
+        self.writer.flush()
     }
 }
 
@@ -66,6 +80,19 @@ where
     }
 }
 
+impl<'a, W: Write<Error = E>, E: embedded_io::Error> Drop for CliHandle<'a, W, E> {
+    fn drop(&mut self) {
+        if let Err(err) = self.cleanup() {
+            *self.dropped_error = Some(err);
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum CliEvent<'a, C, W: Write<Error = E>, E: embedded_io::Error> {
+    Command(C, CliHandle<'a, W, E>),
+}
+
 #[cfg(feature = "history")]
 enum NavigateHistory {
     Older,
@@ -77,12 +104,24 @@ enum NavigateInput {
     Forward,
 }
 
+bitflags! {
+    #[derive(Debug)]
+    struct Flags: u8 {
+        const EDITOR_CLEANUP_PENDING = 1;
+    }
+}
+
 #[doc(hidden)]
 pub struct Cli<W: Write<Error = E>, E: Error, CommandBuffer: Buffer, HistoryBuffer: Buffer> {
-    editor: Option<Editor<CommandBuffer>>,
+    /// Error that occured while dropping CliHandle
+    /// constructed from this Cli.
+    /// So we can return it next time user calls cli
+    dropped_error: Option<E>,
+    editor: Editor<CommandBuffer>,
+    flags: Flags,
     #[cfg(feature = "history")]
     history: History<HistoryBuffer>,
-    input_generator: Option<InputGenerator>,
+    input_generator: InputGenerator,
     prompt: &'static str,
     writer: W,
     #[cfg(not(feature = "history"))]
@@ -112,37 +151,16 @@ where
     CommandBuffer: Buffer,
     HistoryBuffer: Buffer,
 {
-    #[allow(unused_variables)]
-    #[deprecated(since = "0.2.1", note = "please use `builder` instead")]
-    pub fn new(
-        writer: W,
-        command_buffer: CommandBuffer,
-        history_buffer: HistoryBuffer,
-    ) -> Result<Self, E> {
-        let mut cli = Self {
-            editor: Some(Editor::new(command_buffer)),
-            #[cfg(feature = "history")]
-            history: History::new(history_buffer),
-            input_generator: Some(InputGenerator::new()),
-            prompt: DEFAULT_PROMPT,
-            writer,
-            #[cfg(not(feature = "history"))]
-            _ph: PhantomData,
-        };
-
-        cli.writer.flush_str(cli.prompt)?;
-
-        Ok(cli)
-    }
-
     pub(crate) fn from_builder(
         builder: CliBuilder<W, E, CommandBuffer, HistoryBuffer>,
-    ) -> Result<Self, E> {
-        let mut cli = Self {
-            editor: Some(Editor::new(builder.command_buffer)),
+    ) -> Result<Cli<W, E, CommandBuffer, HistoryBuffer>, E> {
+        let mut cli = Cli {
+            dropped_error: None,
+            editor: Editor::new(builder.command_buffer),
+            flags: Flags::empty(),
             #[cfg(feature = "history")]
             history: History::new(builder.history_buffer),
-            input_generator: Some(InputGenerator::new()),
+            input_generator: InputGenerator::new(),
             prompt: builder.prompt,
             writer: builder.writer,
             #[cfg(not(feature = "history"))]
@@ -154,34 +172,38 @@ where
         Ok(cli)
     }
 
-    /// Each call to process byte can be done with different
-    /// command set and/or command processor.
-    /// In process callback you can change some outside state
-    /// so next calls will use different processor
-    pub fn process_byte<C: Autocomplete + Help, P: CommandProcessor<W, E>>(
-        &mut self,
-        b: u8,
-        processor: &mut P,
-    ) -> Result<(), E> {
-        if let (Some(mut editor), Some(mut input_generator)) =
-            (self.editor.take(), self.input_generator.take())
-        {
-            let result = input_generator
-                .accept(b)
-                .map(|input| match input {
-                    Input::Control(control) => {
-                        self.on_control_input::<C, _>(&mut editor, control, processor)
-                    }
-                    Input::Char(text) => self.on_text_input(&mut editor, text),
-                })
-                .unwrap_or(Ok(()));
-
-            self.editor = Some(editor);
-            self.input_generator = Some(input_generator);
-            result
-        } else {
-            Ok(())
+    /// Each call can be done with different command schema
+    pub fn poll<'s: 'e, 'e, C>(&'s mut self, b: u8) -> Result<Option<CliEvent<'e, C, W, E>>, E>
+    where
+        C: Autocomplete + Help + FromRaw<'e>,
+    {
+        if let Some(err) = self.dropped_error.take() {
+            return Err(err);
         }
+
+        if self.flags.contains(Flags::EDITOR_CLEANUP_PENDING) {
+            self.flags.set(Flags::EDITOR_CLEANUP_PENDING, false);
+            self.editor.clear();
+        }
+
+        if let Some(input) = self.input_generator.accept(b) {
+            match input {
+                Input::Control(control) => return self.on_control_input::<C>(control),
+                Input::Char(text) => {
+                    let is_inside = self.editor.cursor() < self.editor.len();
+                    if let Some(c) = self.editor.insert(text) {
+                        if is_inside {
+                            // text is always one char
+                            debug_assert_eq!(c.chars().count(), 1);
+                            self.writer.write_bytes(codes::INSERT_CHAR)?;
+                        }
+                        self.writer.flush_str(c)?;
+                    }
+                }
+            }
+        }
+
+        Ok(None)
     }
 
     /// Set new prompt to use in CLI
@@ -192,9 +214,7 @@ where
         self.prompt = prompt;
         self.clear_line(false)?;
 
-        if let Some(editor) = self.editor.as_mut() {
-            self.writer.flush_str(editor.text())?;
-        }
+        self.writer.flush_str(self.editor.text())?;
 
         Ok(())
     }
@@ -214,9 +234,7 @@ where
             self.writer.write_str(codes::CRLF)?;
         }
         self.writer.write_str(self.prompt)?;
-        if let Some(editor) = self.editor.as_mut() {
-            self.writer.flush_str(editor.text())?;
-        }
+        self.writer.flush_str(self.editor.text())?;
 
         Ok(())
     }
@@ -232,47 +250,29 @@ where
         self.writer.flush()
     }
 
-    fn on_text_input(&mut self, editor: &mut Editor<CommandBuffer>, text: &str) -> Result<(), E> {
-        let is_inside = editor.cursor() < editor.len();
-        if let Some(c) = editor.insert(text) {
-            if is_inside {
-                // text is always one char
-                debug_assert_eq!(c.chars().count(), 1);
-                self.writer.write_bytes(codes::INSERT_CHAR)?;
-            }
-            self.writer.flush_str(c)?;
-        }
-        Ok(())
-    }
-
-    fn on_control_input<C: Autocomplete + Help, P: CommandProcessor<W, E>>(
-        &mut self,
-        editor: &mut Editor<CommandBuffer>,
+    fn on_control_input<'s: 'e, 'e, C>(
+        &'s mut self,
         control: ControlInput,
-        processor: &mut P,
-    ) -> Result<(), E> {
+    ) -> Result<Option<CliEvent<'e, C, W, E>>, E>
+    where
+        C: Autocomplete + Help + FromRaw<'e>,
+    {
         match control {
             ControlInput::Enter => {
+                self.flags.set(Flags::EDITOR_CLEANUP_PENDING, true);
                 self.writer.write_str(codes::CRLF)?;
 
                 #[cfg(feature = "history")]
-                self.history.push(editor.text());
-                let text = editor.text_mut();
-
-                let tokens = Tokens::new(text);
-                self.process_input::<C, _>(tokens, processor)?;
-
-                editor.clear();
-
-                self.writer.flush_str(self.prompt)?;
+                self.history.push(self.editor.text());
+                return self.process_input::<C>();
             }
             ControlInput::Tab => {
                 #[cfg(feature = "autocomplete")]
-                self.process_autocomplete::<C>(editor)?;
+                self.process_autocomplete::<C>()?;
             }
             ControlInput::Backspace => {
-                if editor.move_left() {
-                    editor.remove();
+                if self.editor.move_left() {
+                    self.editor.remove();
                     self.writer.flush_bytes(codes::CURSOR_BACKWARD)?;
                     self.writer.flush_bytes(codes::DELETE_CHAR)?;
                 }
@@ -280,30 +280,26 @@ where
             ControlInput::Down =>
             {
                 #[cfg(feature = "history")]
-                self.navigate_history(editor, NavigateHistory::Newer)?
+                self.navigate_history(NavigateHistory::Newer)?
             }
             ControlInput::Up =>
             {
                 #[cfg(feature = "history")]
-                self.navigate_history(editor, NavigateHistory::Older)?
+                self.navigate_history(NavigateHistory::Older)?
             }
-            ControlInput::Forward => self.navigate_input(editor, NavigateInput::Forward)?,
-            ControlInput::Back => self.navigate_input(editor, NavigateInput::Backward)?,
+            ControlInput::Forward => self.navigate_input(NavigateInput::Forward)?,
+            ControlInput::Back => self.navigate_input(NavigateInput::Backward)?,
         }
 
-        Ok(())
+        Ok(None)
     }
 
-    fn navigate_input(
-        &mut self,
-        editor: &mut Editor<CommandBuffer>,
-        dir: NavigateInput,
-    ) -> Result<(), E> {
+    fn navigate_input(&mut self, dir: NavigateInput) -> Result<(), E> {
         match dir {
-            NavigateInput::Backward if editor.move_left() => {
+            NavigateInput::Backward if self.editor.move_left() => {
                 self.writer.flush_bytes(codes::CURSOR_BACKWARD)?;
             }
-            NavigateInput::Forward if editor.move_right() => {
+            NavigateInput::Forward if self.editor.move_right() => {
                 self.writer.flush_bytes(codes::CURSOR_FORWARD)?;
             }
             _ => return Ok(()),
@@ -312,32 +308,25 @@ where
     }
 
     #[cfg(feature = "history")]
-    fn navigate_history(
-        &mut self,
-        editor: &mut Editor<CommandBuffer>,
-        dir: NavigateHistory,
-    ) -> Result<(), E> {
+    fn navigate_history(&mut self, dir: NavigateHistory) -> Result<(), E> {
         let history_elem = match dir {
             NavigateHistory::Older => self.history.next_older(),
             NavigateHistory::Newer => self.history.next_newer().or(Some("")),
         };
         if let Some(element) = history_elem {
-            editor.clear();
-            editor.insert(element);
+            self.editor.clear();
+            self.editor.insert(element);
             self.clear_line(false)?;
 
-            self.writer.flush_str(editor.text())?;
+            self.writer.flush_str(self.editor.text())?;
         }
         Ok(())
     }
 
     #[cfg(feature = "autocomplete")]
-    fn process_autocomplete<C: Autocomplete>(
-        &mut self,
-        editor: &mut Editor<CommandBuffer>,
-    ) -> Result<(), E> {
-        let initial_cursor = editor.cursor();
-        editor.autocompletion(|request, autocompletion| {
+    fn process_autocomplete<C: Autocomplete>(&mut self) -> Result<(), E> {
+        let initial_cursor = self.editor.cursor();
+        self.editor.autocompletion(|request, autocompletion| {
             C::autocomplete(request.clone(), autocompletion);
             match request {
                 Request::CommandName(name) if "help".starts_with(name) => {
@@ -348,102 +337,91 @@ where
                 _ => {}
             }
         });
-        if editor.cursor() > initial_cursor {
-            let autocompleted = editor.text_range(initial_cursor..);
+        if self.editor.cursor() > initial_cursor {
+            let autocompleted = self.editor.text_range(initial_cursor..);
             self.writer.flush_str(autocompleted)?;
         }
         Ok(())
     }
 
-    fn process_command<P: CommandProcessor<W, E>>(
-        &mut self,
-        command: RawCommand<'_>,
-        handler: &mut P,
-    ) -> Result<(), E> {
-        let cli_writer = Writer::new(&mut self.writer);
-        let mut handle = CliHandle::new(cli_writer);
+    fn process_input<'s: 'e, 'e, C>(&'s mut self) -> Result<Option<CliEvent<'e, C, W, E>>, E>
+    where
+        C: Help + FromRaw<'e>,
+    {
+        let text = self.editor.text_mut();
 
-        let res = handler.process(&mut handle, command);
-
-        if let Some(prompt) = handle.new_prompt {
-            self.prompt = prompt;
-        }
-        if handle.writer.is_dirty() {
-            self.writer.write_str(codes::CRLF)?;
-        }
-        self.writer.flush()?;
-
-        match res {
-            Err(ProcessError::ParseError(err)) => self.process_error(err),
-            Err(ProcessError::WriteError(err)) => Err(err),
-            Ok(()) => Ok(()),
-        }
-    }
-
-    #[allow(clippy::extra_unused_type_parameters)]
-    fn process_input<C: Help, P: CommandProcessor<W, E>>(
-        &mut self,
-        tokens: Tokens<'_>,
-        handler: &mut P,
-    ) -> Result<(), E> {
+        let tokens = Tokens::new(text);
         if let Some(command) = RawCommand::from_tokens(&tokens) {
             #[cfg(feature = "help")]
             if let Some(request) = HelpRequest::from_command(&command) {
-                return self.process_help::<C>(request);
+                Self::process_help::<C>(&mut self.writer, request)?;
+                self.writer.flush_str(self.prompt)?;
+                return Ok(None);
             }
 
-            self.process_command(command, handler)?;
-        };
+            match C::parse(command) {
+                Err(err) => {
+                    Self::process_error(&mut self.writer, err)?;
+                }
+                Ok(cmd) => {
+                    let cli_writer = Writer::new(&mut self.writer);
+                    let handle =
+                        CliHandle::new(&mut self.dropped_error, &mut self.prompt, cli_writer);
+                    return Ok(Some(CliEvent::Command(cmd, handle)));
+                }
+            }
+        }
+        self.writer.flush_str(self.prompt)?;
 
-        Ok(())
+        Ok(None)
     }
 
-    fn process_error(&mut self, error: ParseError<'_>) -> Result<(), E> {
-        self.writer.write_str("error: ")?;
+    fn process_error(writer: &mut W, error: ParseError<'_>) -> Result<(), E> {
+        writer.write_str("error: ")?;
         match error {
             ParseError::MissingRequiredArgument { name } => {
-                self.writer.write_str("missing required argument: ")?;
-                self.writer.write_str(name)?;
+                writer.write_str("missing required argument: ")?;
+                writer.write_str(name)?;
             }
             ParseError::ParseValueError { value, expected } => {
-                self.writer.write_str("failed to parse '")?;
-                self.writer.write_str(value)?;
-                self.writer.write_str("', expected ")?;
-                self.writer.write_str(expected)?;
+                writer.write_str("failed to parse '")?;
+                writer.write_str(value)?;
+                writer.write_str("', expected ")?;
+                writer.write_str(expected)?;
             }
             ParseError::UnexpectedArgument { value } => {
-                self.writer.write_str("unexpected argument: ")?;
-                self.writer.write_str(value)?;
+                writer.write_str("unexpected argument: ")?;
+                writer.write_str(value)?;
             }
             ParseError::UnexpectedLongOption { name } => {
-                self.writer.write_str("unexpected option: -")?;
-                self.writer.write_str("-")?;
-                self.writer.write_str(name)?;
+                writer.write_str("unexpected option: -")?;
+                writer.write_str("-")?;
+                writer.write_str(name)?;
             }
             ParseError::UnexpectedShortOption { name } => {
                 let mut buf = [0; 4];
                 let buf = utils::encode_utf8(name, &mut buf);
-                self.writer.write_str("unexpected option: -")?;
-                self.writer.write_str(buf)?;
+                writer.write_str("unexpected option: -")?;
+                writer.write_str(buf)?;
             }
             ParseError::UnknownCommand => {
-                self.writer.write_str("unknown command")?;
+                writer.write_str("unknown command")?;
             }
         }
-        self.writer.flush_str(codes::CRLF)
+        writer.write_str(codes::CRLF)
     }
 
     #[cfg(feature = "help")]
-    fn process_help<C: Help>(&mut self, request: HelpRequest<'_>) -> Result<(), E> {
-        let mut writer = Writer::new(&mut self.writer);
+    fn process_help<C: Help>(writer: &mut W, request: HelpRequest<'_>) -> Result<(), E> {
+        let mut writer_wrapper = Writer::new(writer);
 
         match request {
-            HelpRequest::All => C::list_commands(&mut writer)?,
+            HelpRequest::All => C::list_commands(&mut writer_wrapper)?,
             HelpRequest::Command(command) => {
-                match C::command_help(&mut |_| Ok(()), command.clone(), &mut writer) {
+                match C::command_help(&mut |_| Ok(()), command.clone(), &mut writer_wrapper) {
                     Err(HelpError::UnknownCommand) => {
-                        writer.write_str("error: ")?;
-                        writer.write_str("unknown command")?;
+                        writer_wrapper.write_str("error: ")?;
+                        writer_wrapper.write_str("unknown command")?;
                     }
                     Err(HelpError::WriteError(err)) => return Err(err),
                     Ok(()) => {}
@@ -451,10 +429,9 @@ where
             }
         };
 
-        if writer.is_dirty() {
-            self.writer.write_str(codes::CRLF)?;
+        if writer_wrapper.is_dirty() {
+            writer.write_str(codes::CRLF)?;
         }
-        self.writer.flush()?;
 
         Ok(())
     }

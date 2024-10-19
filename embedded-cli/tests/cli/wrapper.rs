@@ -2,22 +2,19 @@ use std::{cell::RefCell, convert::Infallible, fmt::Debug, marker::PhantomData, r
 
 use embedded_cli::{
     arguments::Arg as CliArg,
-    cli::{Cli, CliBuilder, CliHandle},
+    cli::{Cli, CliBuilder, CliEvent, CliHandle},
     command::RawCommand as CliRawCommand,
-    service::{Autocomplete, CommandProcessor, Help, ParseError as CliParseError, ProcessError},
+    service::{Autocomplete, FromRaw, Help, ParseError as CliParseError},
 };
 use embedded_io::ErrorType;
 
 use crate::terminal::Terminal;
 
-/// Helper trait to wrap parsed command or error with lifetime into owned command
-pub trait CommandConvert: Sized {
-    fn convert(cmd: CliRawCommand<'_>) -> Result<Self, ParseError>;
-}
-
+/// Helper macro to impl all Command traits for some new type
+/// when impls already exist for other type and we have impl From<other type> for new type
 #[macro_export]
 macro_rules! impl_convert {
-    ($from_ty:ty => $to_ty:ty, $var_name:ident, $conversion:block) => {
+    ($from_ty:ty => $to_ty:ty) => {
         impl embedded_cli::service::Autocomplete for $to_ty {
             #[cfg(feature = "autocomplete")]
             fn autocomplete(
@@ -55,12 +52,12 @@ macro_rules! impl_convert {
             }
         }
 
-        impl crate::wrapper::CommandConvert for $to_ty {
-            fn convert(
-                cmd: embedded_cli::command::RawCommand<'_>,
-            ) -> Result<Self, crate::wrapper::ParseError> {
-                let $var_name = <$from_ty as embedded_cli::service::FromRaw>::parse(cmd)?;
-                let cmd = $conversion;
+        impl<'a> embedded_cli::service::FromRaw<'a> for $to_ty {
+            fn parse(
+                raw: embedded_cli::command::RawCommand<'a>,
+            ) -> Result<Self, embedded_cli::service::ParseError<'a>> {
+                let parsed = <$from_ty as embedded_cli::service::FromRaw>::parse(raw)?;
+                let cmd = parsed.into();
                 Ok(cmd)
             }
         }
@@ -81,11 +78,7 @@ pub struct RawCommand {
     pub args: Vec<Arg>,
 }
 
-impl_convert! {CliRawCommand<'_> => RawCommand, command, {
-    match command {
-        cmd => cmd.into(),
-    }
-}}
+impl_convert! { CliRawCommand<'_> => RawCommand }
 
 impl<'a> From<CliRawCommand<'a>> for RawCommand {
     fn from(value: CliRawCommand<'a>) -> Self {
@@ -161,7 +154,7 @@ impl<'a> From<CliParseError<'a>> for ParseError {
     }
 }
 
-pub struct CliWrapper<T: Autocomplete + Help + CommandConvert + Clone> {
+pub struct CliWrapper<T: Autocomplete + Help + Clone> {
     /// Actual cli object
     cli: Cli<Writer<T>, Infallible, &'static mut [u8], &'static mut [u8]>,
 
@@ -174,36 +167,13 @@ pub struct CliWrapper<T: Autocomplete + Help + CommandConvert + Clone> {
     terminal: Terminal,
 }
 
-struct App<T: CommandConvert + Clone> {
-    handler: Option<
-        Box<dyn FnMut(&mut CliHandle<'_, Writer<T>, Infallible>, T) -> Result<(), Infallible>>,
-    >,
-    state: Rc<RefCell<State<T>>>,
-}
-
-impl<T: CommandConvert + Clone> CommandProcessor<Writer<T>, Infallible> for App<T> {
-    fn process<'a>(
-        &mut self,
-        cli: &mut CliHandle<'_, Writer<T>, Infallible>,
-        command: CliRawCommand<'a>,
-    ) -> Result<(), ProcessError<'a, Infallible>> {
-        let command = T::convert(command);
-
-        self.state.borrow_mut().commands.push(command.clone());
-        if let (Some(handler), Ok(command)) = (&mut self.handler, command) {
-            handler(cli, command)?;
-        }
-        Ok(())
-    }
-}
-
 impl Default for CliWrapper<RawCommand> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: Autocomplete + Help + CommandConvert + Clone> CliWrapper<T> {
+impl<T: Autocomplete + Help + Clone> CliWrapper<T> {
     pub fn builder() -> CliWrapperBuilder<T> {
         CliWrapperBuilder {
             command_size: 80,
@@ -217,44 +187,72 @@ impl<T: Autocomplete + Help + CommandConvert + Clone> CliWrapper<T> {
         Self::builder().build()
     }
 
-    pub fn process_str(&mut self, text: &str) {
-        let mut app = App {
-            handler: self.handler.take(),
-            state: self.state.clone(),
-        };
+    pub fn process_str(&mut self, text: &str)
+    where
+        T: for<'c> FromRaw<'c>,
+    {
         for b in text.as_bytes() {
-            self.cli.process_byte::<T, _>(*b, &mut app).unwrap();
+            if let Some(mut event) = self.cli.poll::<T>(*b).unwrap() {
+                match event {
+                    CliEvent::Command(command, ref mut cli) => {
+                        self.state.borrow_mut().commands.push(Ok(command.clone()));
+                        if let Some(handler) = &mut self.handler {
+                            handler(cli, command).unwrap();
+                        }
+                    }
+                }
+            }
         }
 
-        self.handler = app.handler.take();
         self.update_terminal();
     }
 
-    pub fn send_backspace(&mut self) {
+    pub fn send_backspace(&mut self)
+    where
+        T: for<'c> FromRaw<'c>,
+    {
         self.process_str("\x08")
     }
 
-    pub fn send_down(&mut self) {
+    pub fn send_down(&mut self)
+    where
+        T: for<'c> FromRaw<'c>,
+    {
         self.process_str("\x1B[B")
     }
 
-    pub fn send_enter(&mut self) {
+    pub fn send_enter(&mut self)
+    where
+        T: for<'c> FromRaw<'c>,
+    {
         self.process_str("\n")
     }
 
-    pub fn send_left(&mut self) {
+    pub fn send_left(&mut self)
+    where
+        T: for<'c> FromRaw<'c>,
+    {
         self.process_str("\x1B[D")
     }
 
-    pub fn send_right(&mut self) {
+    pub fn send_right(&mut self)
+    where
+        T: for<'c> FromRaw<'c>,
+    {
         self.process_str("\x1B[C")
     }
 
-    pub fn send_tab(&mut self) {
+    pub fn send_tab(&mut self)
+    where
+        T: for<'c> FromRaw<'c>,
+    {
         self.process_str("\t")
     }
 
-    pub fn send_up(&mut self) {
+    pub fn send_up(&mut self)
+    where
+        T: for<'c> FromRaw<'c>,
+    {
         self.process_str("\x1B[A")
     }
 
@@ -292,14 +290,14 @@ impl<T: Autocomplete + Help + CommandConvert + Clone> CliWrapper<T> {
 }
 
 #[derive(Debug)]
-pub struct CliWrapperBuilder<T: Autocomplete + Help + CommandConvert + Clone> {
+pub struct CliWrapperBuilder<T: Autocomplete + Help + Clone> {
     command_size: usize,
     history_size: usize,
     prompt: Option<&'static str>,
     _ph: PhantomData<T>,
 }
 
-impl<T: Autocomplete + Help + CommandConvert + Clone> CliWrapperBuilder<T> {
+impl<T: Autocomplete + Help + Clone> CliWrapperBuilder<T> {
     pub fn build(self) -> CliWrapper<T> {
         let state = Rc::new(RefCell::new(State::default()));
 

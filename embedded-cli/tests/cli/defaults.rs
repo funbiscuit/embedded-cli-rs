@@ -33,11 +33,7 @@ enum TestCommand {
     },
 }
 
-impl_convert! {CliTestCommand<'_> => TestCommand, command, {
-    match command {
-        cmd => cmd.into(),
-    }
-}}
+impl_convert! { CliTestCommand<'_> => TestCommand }
 
 impl<'a> From<CliTestCommand<'a>> for TestCommand {
     fn from(value: CliTestCommand<'a>) -> Self {

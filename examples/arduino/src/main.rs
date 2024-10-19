@@ -12,6 +12,7 @@ use arduino_hal::prelude::*;
 use arduino_hal::usart::UsartWriter;
 use avr_progmem::progmem_str as F;
 use embedded_cli::cli::CliBuilder;
+use embedded_cli::cli::CliEvent;
 use embedded_cli::cli::CliHandle;
 use embedded_cli::Command;
 use embedded_io::ErrorType;
@@ -250,17 +251,17 @@ Use left and right to move inside input.")
         led.toggle();
 
         let byte = nb::block!(rx.read()).void_unwrap();
-        // Process incoming byte
-        // Command type is specified for autocompletion and help
-        // Processor accepts closure where we can process parsed command
-        // we can use different command and processor with each call
-        let _ = cli.process_byte::<BaseCommand<'_>, _>(
-            byte,
-            &mut BaseCommand::processor(|cli, command| match command {
-                BaseCommand::Led { id, command } => on_led(cli, &mut state, id, command),
-                BaseCommand::Adc { id, command } => on_adc(cli, &mut state, id, command),
-                BaseCommand::Status => on_status(cli, &mut state),
-            }),
-        );
+        // Process incoming byte and poll new event (if happened)
+        // Command type is specified for autocompletion, help and parsing
+        // We can use different command type with each call to poll
+        if let Ok(Some(mut event)) = cli.poll::<BaseCommand<'_>>(byte) {
+            let _ = match event {
+                CliEvent::Command(command, ref mut cli) => match command {
+                    BaseCommand::Led { id, command } => on_led(cli, &mut state, id, command),
+                    BaseCommand::Adc { id, command } => on_adc(cli, &mut state, id, command),
+                    BaseCommand::Status => on_status(cli, &mut state),
+                },
+            };
+        }
     }
 }

@@ -1,6 +1,6 @@
 #![warn(rust_2018_idioms)]
 
-use embedded_cli::cli::{CliBuilder, CliHandle};
+use embedded_cli::cli::{CliBuilder, CliEvent, CliHandle};
 use embedded_cli::codes;
 use embedded_cli::Command;
 use embedded_io::{ErrorType, Write};
@@ -231,24 +231,24 @@ Use left and right to move inside input."
             _ => continue,
         };
         // Process incoming byte
-        // Command type is specified for autocompletion and help
-        // Processor accepts closure where we can process parsed command
-        // we can use different command and processor with each call
+        // Command type is specified for autocompletion, help and parsing from args
+        // we can use different command type with each call
         // TODO: add example of login that uses different states
         for byte in bytes {
-            cli.process_byte::<BaseCommand<'_>, _>(
-                byte,
-                &mut BaseCommand::processor(|cli, command| match command {
-                    BaseCommand::Led { id, command } => on_led(cli, &mut state, id, command),
-                    BaseCommand::Adc { id, command } => on_adc(cli, &mut state, id, command),
-                    BaseCommand::Status => on_status(cli, &mut state),
-                    BaseCommand::Exit => {
-                        state.should_exit = true;
-                        cli.writer().write_str("Cli will shutdown now")
-                    }
-                }),
-            )
-            .unwrap();
+            if let Some(mut event) = cli.poll::<BaseCommand<'_>>(byte).unwrap() {
+                match event {
+                    CliEvent::Command(command, ref mut cli) => match command {
+                        BaseCommand::Led { id, command } => on_led(cli, &mut state, id, command),
+                        BaseCommand::Adc { id, command } => on_adc(cli, &mut state, id, command),
+                        BaseCommand::Status => on_status(cli, &mut state),
+                        BaseCommand::Exit => {
+                            state.should_exit = true;
+                            cli.writer().write_str("Cli will shutdown now")
+                        }
+                    },
+                }
+                .unwrap();
+            }
         }
 
         if state.should_exit {

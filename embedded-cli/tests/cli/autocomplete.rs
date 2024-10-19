@@ -1,8 +1,6 @@
-use embedded_cli::command::RawCommand;
-use embedded_cli::service::FromRaw;
 use embedded_cli::Command;
 
-use crate::wrapper::{CliWrapper, CommandConvert, ParseError};
+use crate::wrapper::CliWrapper;
 
 use crate::terminal::assert_terminal;
 
@@ -11,12 +9,6 @@ enum TestCommand {
     GetLed,
     GetAdc,
     Exit,
-}
-
-impl CommandConvert for TestCommand {
-    fn convert(cmd: RawCommand<'_>) -> Result<Self, ParseError> {
-        Ok(TestCommand::parse(cmd)?)
-    }
 }
 
 #[test]

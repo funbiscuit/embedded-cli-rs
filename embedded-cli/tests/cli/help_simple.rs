@@ -61,7 +61,7 @@ enum Base {
     },
 }
 
-impl_convert! {CliBase<'_> => Base, command, { command.into() }}
+impl_convert! { CliBase<'_> => Base }
 
 impl<'a> From<CliBase<'a>> for Base {
     fn from(value: CliBase<'a>) -> Self {

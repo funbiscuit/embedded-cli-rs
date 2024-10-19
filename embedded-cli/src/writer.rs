@@ -29,6 +29,10 @@ impl<'a, W: Write<Error = E>, E: Error> Writer<'a, W, E> {
         }
     }
 
+    pub(crate) fn flush(&mut self) -> Result<(), E> {
+        self.writer.flush()
+    }
+
     pub(crate) fn is_dirty(&self) -> bool {
         self.dirty
             && (self.last_bytes[0] != codes::CARRIAGE_RETURN

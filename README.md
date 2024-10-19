@@ -134,10 +134,9 @@ use ufmt::uwrite;
 // read byte from somewhere (for example, uart)
 // let byte = nb::block!(rx.read()).void_unwrap();
 
-let _ = cli.process_byte::<Base, _>(
-    byte,
-    &mut Base::processor(|cli, command| {
-        match command {
+if let Ok(Some(mut event)) = cli.poll::<Base<'_>>(byte) {
+    let _ = match event {
+        CliEvent::Command(command, ref mut cli) => match command {
             Base::Hello { name } => {
                 // last write in command callback may or may not
                 // end with newline. so both uwrite!() and uwriteln!()
@@ -148,10 +147,9 @@ let _ = cli.process_byte::<Base, _>(
                 // We can write via normal function if formatting not needed
                 cli.writer().write_str("Cli can't shutdown now")?;
             }
-        }
-        Ok(())
-    }),
-);
+        },
+    };
+}
 ```
 
 ### Split commands into modules
@@ -197,17 +195,15 @@ enum Group<'a> {
 And then process it in similar way:
 
 ```rust
-let _ = cli.process_byte::<Group, _>(
-    byte,
-    &mut Group::processor(|cli, command| {
-        match command {
+if let Ok(Some(mut event)) = cli.poll::<Group<'_>>(byte) {
+    let _ = match event {
+        CliEvent::Command(command, ref mut cli) => match command {
             Group::Base(cmd) => todo!("process base command"),
             Group::Get(cmd) => todo!("process get command"),
             Group::Other(cmd) => todo!("process all other, not parsed commands"),
-        }
-        Ok(())
-    }),
-);
+        },
+    };
+}
 ```
 
 You can check full arduino example [here](examples/arduino/README.md).
@@ -332,14 +328,14 @@ Memory usage might change in future versions, but I'll try to keep this table up
 
 | Features                        | ROM, bytes | Static RAM, bytes |
 |---------------------------------|:----------:|:-----------------:|
-|                                 |   10182    |        274        |
-| `autocomplete`                  |   12112    |        290        |
-| `history`                       |   12032    |        315        |
-| `autocomplete` `history`        |   13586    |        331        |
-| `help`                          |   14412    |        544        |
-| `autocomplete` `help`           |   16110    |        556        |
-| `history` `help`                |   16402    |        585        |
-| `autocomplete` `history` `help` |   16690    |        597        |
+|                                 |    9758    |        274        |
+| `autocomplete`                  |   11368    |        290        |
+| `history`                       |   11564    |        315        |
+| `autocomplete` `history`        |   13012    |        331        |
+| `help`                          |   13950    |        544        |
+| `autocomplete` `help`           |   15620    |        556        |
+| `history` `help`                |   15956    |        585        |
+| `autocomplete` `history` `help` |   17428    |        597        |
 
 This table is generated using this [script](examples/arduino/memory.sh).
 As table shows, enabling help adds quite a lot to memory usage since help usually requires a lot of text to be stored.
