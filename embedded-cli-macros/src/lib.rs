@@ -4,7 +4,6 @@ use syn::parse_macro_input;
 
 mod command;
 mod group;
-mod processor;
 mod utils;
 
 #[proc_macro_derive(Command, attributes(command, arg))]

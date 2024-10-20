@@ -9,7 +9,7 @@ use super::{
     TargetType,
 };
 
-pub fn derive_from_raw(target: &TargetType, commands: &[Command]) -> Result<TokenStream> {
+pub fn derive_from_command(target: &TargetType, commands: &[Command]) -> Result<TokenStream> {
     let ident = target.ident();
 
     let parsing = create_parsing(ident, commands)?;
@@ -18,8 +18,8 @@ pub fn derive_from_raw(target: &TargetType, commands: &[Command]) -> Result<Toke
 
     let output = quote! {
 
-        impl<'a> _cli::service::FromRaw<'a> for #ident #named_lifetime {
-            fn parse(command: _cli::command::RawCommand<'a>) -> Result<Self, _cli::service::ParseError<'a>> {
+        impl<'a> _cli::command::FromCommand<'a> for #ident #named_lifetime {
+            fn parse(name: &'a str, args: _cli::arguments::Args<'a>) -> Result<Self, _cli::command::ParseError<'a>> {
                 #parsing
                 Ok(command)
             }
@@ -33,9 +33,9 @@ fn create_parsing(ident: &Ident, commands: &[Command]) -> Result<TokenStream> {
     let match_arms: Vec<_> = commands.iter().map(|c| command_parsing(ident, c)).collect();
 
     Ok(quote! {
-        let command = match command.name() {
+        let command = match name {
             #(#match_arms)*
-            cmd => return Err(_cli::service::ParseError::UnknownCommand),
+            _ => return Err(_cli::command::ParseError::UnknownCommand),
         };
     })
 }
@@ -145,7 +145,7 @@ fn create_arg_parsing(command: &Command) -> (TokenStream, Vec<TokenStream>) {
                 } else {
                     let name = arg.full_name();
                     quote! {
-                        #fi_raw: #fi.ok_or(_cli::service::ParseError::MissingRequiredArgument {
+                        #fi_raw: #fi.ok_or(_cli::command::ParseError::MissingRequiredArgument {
                             name: #name,
                         })?
                     }
@@ -177,10 +177,7 @@ fn create_arg_parsing(command: &Command) -> (TokenStream, Vec<TokenStream>) {
 
         subcommand_value_arm = Some(quote! {
             let args = args.into_args();
-            let raw = _cli::command::RawCommand::new(name, args);
-
-            #fi = Some(<#ty as _cli::service::FromRaw>::parse(raw)?);
-
+            #fi = Some(<#ty as _cli::command::FromCommand>::parse(name, args)?);
             break;
         });
 
@@ -189,7 +186,7 @@ fn create_arg_parsing(command: &Command) -> (TokenStream, Vec<TokenStream>) {
             ArgType::Normal => {
                 let name = subcommand.full_name();
                 quote! {
-                    #fi_raw #fi.ok_or(_cli::service::ParseError::MissingRequiredArgument {
+                    #fi_raw #fi.ok_or(_cli::command::ParseError::MissingRequiredArgument {
                         name: #name,
                     })?
                 }
@@ -215,7 +212,7 @@ fn create_arg_parsing(command: &Command) -> (TokenStream, Vec<TokenStream>) {
     } else if positional_value_arms.is_empty() {
         quote! {
             _cli::arguments::Arg::Value(value) if state == States::Normal =>
-            return Err(_cli::service::ParseError::UnexpectedArgument {
+            return Err(_cli::command::ParseError::UnexpectedArgument {
                 value,
             })
         }
@@ -224,7 +221,7 @@ fn create_arg_parsing(command: &Command) -> (TokenStream, Vec<TokenStream>) {
             _cli::arguments::Arg::Value(val) if state == States::Normal => {
                 match positional {
                     #(#positional_value_arms)*
-                    _ => return Err(_cli::service::ParseError::UnexpectedArgument{
+                    _ => return Err(_cli::command::ParseError::UnexpectedArgument{
                         value: val
                     })
                 }
@@ -244,7 +241,7 @@ fn create_arg_parsing(command: &Command) -> (TokenStream, Vec<TokenStream>) {
         let mut state = States::Normal;
         let mut positional = 0;
 
-        let mut args = command.args().args();
+        let mut args = args.iter();
         while let Some(arg) = args.next() {
             match arg {
                 #(#option_name_arms)*
@@ -252,10 +249,10 @@ fn create_arg_parsing(command: &Command) -> (TokenStream, Vec<TokenStream>) {
                 #value_arm,
                 _cli::arguments::Arg::Value(_) => unreachable!(),
                 _cli::arguments::Arg::LongOption(option) => {
-                    return Err(_cli::service::ParseError::UnexpectedLongOption { name: option })
+                    return Err(_cli::command::ParseError::UnexpectedLongOption { name: option })
                 }
                 _cli::arguments::Arg::ShortOption(option) => {
-                    return Err(_cli::service::ParseError::UnexpectedShortOption { name: option })
+                    return Err(_cli::command::ParseError::UnexpectedShortOption { name: option })
                 }
                 _cli::arguments::Arg::DoubleDash => {}
             }
@@ -293,6 +290,6 @@ pub fn create_option_name_arm(
 
 fn create_parse_arg_value(ty: &TokenStream) -> TokenStream {
     quote! {
-        <#ty as _cli::arguments::FromArgument>::from_arg(val)?,
+        <#ty as _cli::arguments::FromArg>::from_arg(val)?,
     }
 }

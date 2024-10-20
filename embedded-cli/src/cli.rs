@@ -7,12 +7,14 @@ use core::fmt::Debug;
 use core::marker::PhantomData;
 
 use crate::{
+    arguments::Args,
+    autocomplete::Autocomplete,
     buffer::Buffer,
     codes,
-    command::RawCommand,
+    command::{FromCommand, ParseError},
     editor::Editor,
+    help::Help,
     input::{ControlInput, Input, InputGenerator},
-    service::{Autocomplete, FromRaw, Help, ParseError},
     token::Tokens,
     utils,
     writer::{WriteExt, Writer},
@@ -22,7 +24,7 @@ use crate::{
 use crate::autocomplete::Request;
 
 #[cfg(feature = "help")]
-use crate::{help::HelpRequest, service::HelpError};
+use crate::help::{HelpError, HelpRequest};
 
 #[cfg(feature = "history")]
 use crate::history::History;
@@ -175,7 +177,7 @@ where
     /// Each call can be done with different command schema
     pub fn poll<'s: 'e, 'e, C>(&'s mut self, b: u8) -> Result<Option<CliEvent<'e, C, W, E>>, E>
     where
-        C: Autocomplete + Help + FromRaw<'e>,
+        C: Autocomplete + Help + FromCommand<'e>,
     {
         if let Some(err) = self.dropped_error.take() {
             return Err(err);
@@ -255,7 +257,7 @@ where
         control: ControlInput,
     ) -> Result<Option<CliEvent<'e, C, W, E>>, E>
     where
-        C: Autocomplete + Help + FromRaw<'e>,
+        C: Autocomplete + Help + FromCommand<'e>,
     {
         match control {
             ControlInput::Enter => {
@@ -346,29 +348,33 @@ where
 
     fn process_input<'s: 'e, 'e, C>(&'s mut self) -> Result<Option<CliEvent<'e, C, W, E>>, E>
     where
-        C: Help + FromRaw<'e>,
+        C: Help + FromCommand<'e>,
     {
         let text = self.editor.text_mut();
 
         let tokens = Tokens::new(text);
-        if let Some(command) = RawCommand::from_tokens(&tokens) {
-            #[cfg(feature = "help")]
-            if let Some(request) = HelpRequest::from_command(&command) {
-                Self::process_help::<C>(&mut self.writer, request)?;
-                self.writer.flush_str(self.prompt)?;
-                return Ok(None);
-            }
+        let (name, args) = if let Some((name, tokens)) = tokens.split_first() {
+            (name, Args::new(tokens))
+        } else {
+            self.writer.flush_str(self.prompt)?;
+            return Ok(None);
+        };
 
-            match C::parse(command) {
-                Err(err) => {
-                    Self::process_error(&mut self.writer, err)?;
-                }
-                Ok(cmd) => {
-                    let cli_writer = Writer::new(&mut self.writer);
-                    let handle =
-                        CliHandle::new(&mut self.dropped_error, &mut self.prompt, cli_writer);
-                    return Ok(Some(CliEvent::Command(cmd, handle)));
-                }
+        #[cfg(feature = "help")]
+        if let Some(request) = HelpRequest::from_command(name, &args) {
+            Self::process_help::<C>(&mut self.writer, request)?;
+            self.writer.flush_str(self.prompt)?;
+            return Ok(None);
+        }
+
+        match C::parse(name, args) {
+            Err(err) => {
+                Self::process_error(&mut self.writer, err)?;
+            }
+            Ok(cmd) => {
+                let cli_writer = Writer::new(&mut self.writer);
+                let handle = CliHandle::new(&mut self.dropped_error, &mut self.prompt, cli_writer);
+                return Ok(Some(CliEvent::Command(cmd, handle)));
             }
         }
         self.writer.flush_str(self.prompt)?;
@@ -417,8 +423,8 @@ where
 
         match request {
             HelpRequest::All => C::list_commands(&mut writer_wrapper)?,
-            HelpRequest::Command(command) => {
-                match C::command_help(&mut |_| Ok(()), command.clone(), &mut writer_wrapper) {
+            HelpRequest::Command { name, args } => {
+                match C::command_help(&mut |_| Ok(()), name, args, &mut writer_wrapper) {
                     Err(HelpError::UnknownCommand) => {
                         writer_wrapper.write_str("error: ")?;
                         writer_wrapper.write_str("unknown command")?;

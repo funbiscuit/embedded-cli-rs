@@ -177,7 +177,7 @@ impl CommandArg {
 
         let default_value = match (arg_attrs.default_value, arg_attrs.default_value_t) {
             (Some(value), None) => Some(quote! {
-                <#field_type as _cli::arguments::FromArgument>::from_arg(#value)?,
+                <#field_type as _cli::arguments::FromArg>::from_arg(#value)?,
             }),
             (None, Some(value)) => {
                 let value = match value {

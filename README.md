@@ -212,14 +212,14 @@ So you can play with CLI without flashing a real device.
 
 ## Argument parsing
 
-Command can have any number of arguments. Types of argument must implement `FromArgument` trait:
+Command can have any number of arguments. Types of argument must implement `FromArg` trait:
 
 ```rust
 struct CustomArg<'a> {
     // fields
 }
 
-impl<'a> embedded_cli::arguments::FromArgument<'a> for CustomArg<'a> {
+impl<'a> embedded_cli::arguments::FromArg<'a> for CustomArg<'a> {
     fn from_arg(arg: &'a str) -> Result<Self, &'static str>
     where
         Self: Sized {
@@ -328,14 +328,14 @@ Memory usage might change in future versions, but I'll try to keep this table up
 
 | Features                        | ROM, bytes | Static RAM, bytes |
 |---------------------------------|:----------:|:-----------------:|
-|                                 |    9758    |        274        |
-| `autocomplete`                  |   11368    |        290        |
-| `history`                       |   11564    |        315        |
-| `autocomplete` `history`        |   13012    |        331        |
-| `help`                          |   13950    |        544        |
-| `autocomplete` `help`           |   15620    |        556        |
-| `history` `help`                |   15956    |        585        |
-| `autocomplete` `history` `help` |   17428    |        597        |
+|                                 |    9816    |        274        |
+| `autocomplete`                  |   11420    |        290        |
+| `history`                       |   11616    |        315        |
+| `autocomplete` `history`        |   13064    |        331        |
+| `help`                          |   14212    |        544        |
+| `autocomplete` `help`           |   15884    |        556        |
+| `history` `help`                |   16002    |        585        |
+| `autocomplete` `history` `help` |   17472    |        597        |
 
 This table is generated using this [script](examples/arduino/memory.sh).
 As table shows, enabling help adds quite a lot to memory usage since help usually requires a lot of text to be stored.

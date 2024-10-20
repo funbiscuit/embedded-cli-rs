@@ -1,5 +1,14 @@
 use crate::utils;
 
+pub trait Autocomplete {
+    // trait is kept available so it's possible to use same where clause
+    #[cfg(feature = "autocomplete")]
+    /// Try to process autocompletion request
+    /// Autocompleted bytes (not present in request) should be written to
+    /// given autocompletion.
+    fn autocomplete(request: Request<'_>, autocompletion: &mut Autocompletion<'_>);
+}
+
 #[derive(Clone, Debug)]
 #[non_exhaustive]
 pub enum Request<'a> {

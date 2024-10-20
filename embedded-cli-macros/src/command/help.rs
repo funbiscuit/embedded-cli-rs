@@ -21,7 +21,7 @@ pub fn derive_help(
     let command_count = commands.len();
 
     let output = quote! {
-        impl #named_lifetime _cli::service::Help for #ident #named_lifetime {
+        impl #named_lifetime _cli::help::Help for #ident #named_lifetime {
             fn command_count() -> usize { #command_count }
 
             fn list_commands<W: _io::Write<Error = E>, E: _io::Error>(
@@ -37,12 +37,13 @@ pub fn derive_help(
                 F: FnMut(&mut _cli::writer::Writer<'_, W, E>) -> Result<(), E>,
             >(
                 parent: &mut F,
-                command: _cli::command::RawCommand<'_>,
+                name: &str,
+                args: _cli::arguments::Args<'_>,
                 writer: &mut _cli::writer::Writer<'_, W, E>,
-            ) -> Result<(), _cli::service::HelpError<E>> {
-                match command.name() {
+            ) -> Result<(), _cli::help::HelpError<E>> {
+                match name {
                     #(#commands_help)*
-                    _ => return Err(_cli::service::HelpError::UnknownCommand),
+                    _ => return Err(_cli::help::HelpError::UnknownCommand),
                 }
 
                 Ok(())
@@ -64,7 +65,7 @@ pub fn derive_help(
     let named_lifetime = target.named_lifetime();
 
     let output = quote! {
-        impl #named_lifetime _cli::service::Help for #ident #named_lifetime { }
+        impl #named_lifetime _cli::help::Help for #ident #named_lifetime { }
     };
 
     Ok(output)
@@ -170,8 +171,7 @@ fn create_command_help(command: &Command) -> TokenStream {
 
         let subcommand_ty = &subcommand.field_type;
         let subcommand_value_arm = quote! {
-            let args = args.into_args();
-            let raw = _cli::command::RawCommand::new(name, args);
+            let args = args_iter.into_args();
 
             let mut parent = |writer: &mut _cli::writer::Writer<'_, W, E>| {
                 parent(writer)?;
@@ -180,7 +180,7 @@ fn create_command_help(command: &Command) -> TokenStream {
                 Ok(())
             };
 
-            return <#subcommand_ty as _cli::service::Help>::command_help(&mut parent, raw, writer);
+            return <#subcommand_ty as _cli::help::Help>::command_help(&mut parent, name, args, writer);
         };
 
         let value_arm = quote! {
@@ -198,8 +198,8 @@ fn create_command_help(command: &Command) -> TokenStream {
                 }
                 let mut state = States::Normal;
 
-                let mut args = command.args().args();
-                while let Some(arg) = args.next() {
+                let mut args_iter = args.iter();
+                while let Some(arg) = args_iter.next() {
                     match arg {
                         #(#option_name_arms)*
                         #(#option_value_arms)*
@@ -262,7 +262,7 @@ fn create_commands_help(command: &Command) -> Option<TokenStream> {
     command.subcommand.as_ref().map(|subcommand| {
         let ty = &subcommand.field_type;
         quote! {
-            <#ty as _cli::service::Help>::list_commands(writer)?;
+            <#ty as _cli::help::Help>::list_commands(writer)?;
         }
     })
 }

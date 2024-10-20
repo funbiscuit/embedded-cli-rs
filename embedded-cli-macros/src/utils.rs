@@ -54,16 +54,6 @@ impl TargetType {
             quote! {}
         }
     }
-
-    pub fn unnamed_lifetime(&self) -> TokenStream {
-        if self.has_lifetime {
-            quote! {
-                <'_>
-            }
-        } else {
-            quote! {}
-        }
-    }
 }
 
 pub fn extract_generic_type<'a>(ty: &'a Type, expected_container: &[&str]) -> Option<&'a Type> {

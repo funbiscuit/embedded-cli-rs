@@ -2,9 +2,10 @@ use std::{cell::RefCell, convert::Infallible, fmt::Debug, marker::PhantomData, r
 
 use embedded_cli::{
     arguments::Arg as CliArg,
+    autocomplete::Autocomplete,
     cli::{Cli, CliBuilder, CliEvent, CliHandle},
-    command::RawCommand as CliRawCommand,
-    service::{Autocomplete, FromRaw, Help, ParseError as CliParseError},
+    command::{FromCommand, ParseError as CliParseError, RawCommand as CliRawCommand},
+    help::Help,
 };
 use embedded_io::ErrorType;
 
@@ -15,7 +16,7 @@ use crate::terminal::Terminal;
 #[macro_export]
 macro_rules! impl_convert {
     ($from_ty:ty => $to_ty:ty) => {
-        impl embedded_cli::service::Autocomplete for $to_ty {
+        impl embedded_cli::autocomplete::Autocomplete for $to_ty {
             #[cfg(feature = "autocomplete")]
             fn autocomplete(
                 request: embedded_cli::autocomplete::Request<'_>,
@@ -25,7 +26,7 @@ macro_rules! impl_convert {
             }
         }
 
-        impl embedded_cli::service::Help for $to_ty {
+        impl embedded_cli::help::Help for $to_ty {
             #[cfg(feature = "help")]
             fn command_count() -> usize {
                 <$from_ty>::command_count()
@@ -45,18 +46,20 @@ macro_rules! impl_convert {
                 F: FnMut(&mut embedded_cli::writer::Writer<'_, W, E>) -> Result<(), E>,
             >(
                 parent: &mut F,
-                command: embedded_cli::command::RawCommand<'_>,
+                name: &str,
+                args: embedded_cli::arguments::Args<'_>,
                 writer: &mut embedded_cli::writer::Writer<'_, W, E>,
-            ) -> Result<(), embedded_cli::service::HelpError<E>> {
-                <$from_ty>::command_help(parent, command, writer)
+            ) -> Result<(), embedded_cli::help::HelpError<E>> {
+                <$from_ty>::command_help(parent, name, args, writer)
             }
         }
 
-        impl<'a> embedded_cli::service::FromRaw<'a> for $to_ty {
+        impl<'a> embedded_cli::command::FromCommand<'a> for $to_ty {
             fn parse(
-                raw: embedded_cli::command::RawCommand<'a>,
-            ) -> Result<Self, embedded_cli::service::ParseError<'a>> {
-                let parsed = <$from_ty as embedded_cli::service::FromRaw>::parse(raw)?;
+                name: &'a str,
+                args: embedded_cli::arguments::Args<'a>,
+            ) -> Result<Self, embedded_cli::command::ParseError<'a>> {
+                let parsed = <$from_ty as embedded_cli::command::FromCommand>::parse(name, args)?;
                 let cmd = parsed.into();
                 Ok(cmd)
             }
@@ -86,7 +89,7 @@ impl<'a> From<CliRawCommand<'a>> for RawCommand {
             name: value.name().to_string(),
             args: value
                 .args()
-                .args()
+                .iter()
                 .map(|arg| match arg {
                     CliArg::DoubleDash => Arg::DoubleDash,
                     CliArg::LongOption(name) => Arg::LongOption(name.to_string()),
@@ -189,7 +192,7 @@ impl<T: Autocomplete + Help + Clone> CliWrapper<T> {
 
     pub fn process_str(&mut self, text: &str)
     where
-        T: for<'c> FromRaw<'c>,
+        T: for<'c> FromCommand<'c>,
     {
         for b in text.as_bytes() {
             if let Some(mut event) = self.cli.poll::<T>(*b).unwrap() {
@@ -209,49 +212,49 @@ impl<T: Autocomplete + Help + Clone> CliWrapper<T> {
 
     pub fn send_backspace(&mut self)
     where
-        T: for<'c> FromRaw<'c>,
+        T: for<'c> FromCommand<'c>,
     {
         self.process_str("\x08")
     }
 
     pub fn send_down(&mut self)
     where
-        T: for<'c> FromRaw<'c>,
+        T: for<'c> FromCommand<'c>,
     {
         self.process_str("\x1B[B")
     }
 
     pub fn send_enter(&mut self)
     where
-        T: for<'c> FromRaw<'c>,
+        T: for<'c> FromCommand<'c>,
     {
         self.process_str("\n")
     }
 
     pub fn send_left(&mut self)
     where
-        T: for<'c> FromRaw<'c>,
+        T: for<'c> FromCommand<'c>,
     {
         self.process_str("\x1B[D")
     }
 
     pub fn send_right(&mut self)
     where
-        T: for<'c> FromRaw<'c>,
+        T: for<'c> FromCommand<'c>,
     {
         self.process_str("\x1B[C")
     }
 
     pub fn send_tab(&mut self)
     where
-        T: for<'c> FromRaw<'c>,
+        T: for<'c> FromCommand<'c>,
     {
         self.process_str("\t")
     }
 
     pub fn send_up(&mut self)
     where
-        T: for<'c> FromRaw<'c>,
+        T: for<'c> FromCommand<'c>,
     {
         self.process_str("\x1B[A")
     }

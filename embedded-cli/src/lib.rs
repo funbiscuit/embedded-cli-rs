@@ -17,7 +17,6 @@ pub mod help;
 #[cfg(feature = "history")]
 mod history;
 mod input;
-pub mod service;
 mod token;
 mod utf8;
 mod utils;

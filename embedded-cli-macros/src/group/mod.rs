@@ -3,7 +3,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput};
 
-use crate::{processor, utils::TargetType};
+use crate::utils::TargetType;
 
 use self::command_group::CommandGroup;
 
@@ -36,13 +36,11 @@ pub fn derive_command_group(input: DeriveInput) -> Result<TokenStream> {
     let derive_autocomplete = derive_autocomplete(&target, &groups);
     let derive_help = derive_help(&target, &groups);
     let derive_from_raw = derive_from_raw(&target, &groups);
-    let impl_processor = processor::impl_processor(&target)?;
 
     let output = quote! {
         #derive_autocomplete
         #derive_help
         #derive_from_raw
-        #impl_processor
     };
 
     Ok(output)

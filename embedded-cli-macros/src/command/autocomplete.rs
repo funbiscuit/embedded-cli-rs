@@ -13,7 +13,7 @@ pub fn derive_autocomplete(target: &TargetType, commands: &[Command]) -> Result<
     let named_lifetime = target.named_lifetime();
 
     let output = quote! {
-        impl #named_lifetime _cli::service::Autocomplete for #ident #named_lifetime {
+        impl #named_lifetime _cli::autocomplete::Autocomplete for #ident #named_lifetime {
             fn autocomplete(
                 request: _cli::autocomplete::Request<'_>,
                 autocompletion: &mut _cli::autocomplete::Autocompletion<'_>,
@@ -44,7 +44,7 @@ pub fn derive_autocomplete(target: &TargetType, commands: &[Command]) -> Result<
     let named_lifetime = target.named_lifetime();
 
     let output = quote! {
-        impl #named_lifetime _cli::service::Autocomplete for #ident #named_lifetime { }
+        impl #named_lifetime _cli::autocomplete::Autocomplete for #ident #named_lifetime { }
     };
 
     Ok(output)

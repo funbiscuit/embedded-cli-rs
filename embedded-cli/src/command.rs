@@ -1,19 +1,56 @@
-use core::marker::PhantomData;
-
-use embedded_io::Write;
-
 use crate::{
-    arguments::ArgList,
-    cli::CliHandle,
-    service::{Autocomplete, CommandProcessor, FromRaw, Help, ParseError, ProcessError},
-    token::Tokens,
+    arguments::{Args, FromArgError},
+    autocomplete::Autocomplete,
+    help::Help,
 };
 
 #[cfg(feature = "autocomplete")]
 use crate::autocomplete::{Autocompletion, Request};
 
 #[cfg(feature = "help")]
-use crate::service::HelpError;
+use {crate::help::HelpError, embedded_io::Write};
+
+pub trait FromCommand<'a>: Sized {
+    /// Parse command name and args into typed container
+    fn parse(name: &'a str, args: Args<'a>) -> Result<Self, ParseError<'a>>;
+}
+
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum ParseError<'a> {
+    MissingRequiredArgument {
+        /// Name of the argument. For example `<FILE>`, `-f <FILE>`, `--file <FILE>`
+        name: &'a str,
+    },
+
+    ParseValueError {
+        value: &'a str,
+        expected: &'static str,
+    },
+
+    UnexpectedArgument {
+        value: &'a str,
+    },
+
+    UnexpectedLongOption {
+        name: &'a str,
+    },
+
+    UnexpectedShortOption {
+        name: char,
+    },
+
+    UnknownCommand,
+}
+
+impl<'a> From<FromArgError<'a>> for ParseError<'a> {
+    fn from(error: FromArgError<'a>) -> Self {
+        Self::ParseValueError {
+            value: error.value,
+            expected: error.expected,
+        }
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RawCommand<'a> {
@@ -25,70 +62,20 @@ pub struct RawCommand<'a> {
     /// Argument list of the command
     ///
     /// In `set led 1 1` arguments is `led 1 1`
-    args: ArgList<'a>,
+    args: Args<'a>,
 }
 
 impl<'a> RawCommand<'a> {
-    /// Crate raw command from input tokens
-    pub(crate) fn from_tokens(tokens: &Tokens<'a>) -> Option<Self> {
-        let mut iter = tokens.iter();
-        let name = iter.next()?;
-        let tokens = iter.into_tokens();
-
-        Some(RawCommand {
-            name,
-            args: ArgList::new(tokens),
-        })
-    }
-
-    pub fn new(name: &'a str, args: ArgList<'a>) -> Self {
+    pub fn new(name: &'a str, args: Args<'a>) -> Self {
         Self { name, args }
     }
 
-    pub fn args(&self) -> ArgList<'a> {
+    pub fn args(&self) -> Args<'a> {
         self.args.clone()
     }
 
     pub fn name(&self) -> &'a str {
         self.name
-    }
-
-    pub fn processor<
-        W: Write<Error = E>,
-        E: embedded_io::Error,
-        F: FnMut(&mut CliHandle<'_, W, E>, RawCommand<'_>) -> Result<(), E>,
-    >(
-        f: F,
-    ) -> impl CommandProcessor<W, E> {
-        struct Processor<
-            W: Write<Error = E>,
-            E: embedded_io::Error,
-            F: FnMut(&mut CliHandle<'_, W, E>, RawCommand<'_>) -> Result<(), E>,
-        > {
-            f: F,
-            _ph: PhantomData<(W, E)>,
-        }
-
-        impl<
-                W: Write<Error = E>,
-                E: embedded_io::Error,
-                F: FnMut(&mut CliHandle<'_, W, E>, RawCommand<'_>) -> Result<(), E>,
-            > CommandProcessor<W, E> for Processor<W, E, F>
-        {
-            fn process<'a>(
-                &mut self,
-                cli: &mut CliHandle<'_, W, E>,
-                raw: RawCommand<'a>,
-            ) -> Result<(), ProcessError<'a, E>> {
-                (self.f)(cli, raw)?;
-                Ok(())
-            }
-        }
-
-        Processor {
-            f,
-            _ph: PhantomData,
-        }
     }
 }
 
@@ -120,7 +107,8 @@ impl<'a> Help for RawCommand<'a> {
         F: FnMut(&mut crate::writer::Writer<'_, W, E>) -> Result<(), E>,
     >(
         _: &mut F,
-        _: RawCommand<'_>,
+        _: &str,
+        _: Args<'_>,
         _: &mut crate::writer::Writer<'_, W, E>,
     ) -> Result<(), HelpError<E>> {
         // noop
@@ -128,9 +116,9 @@ impl<'a> Help for RawCommand<'a> {
     }
 }
 
-impl<'a> FromRaw<'a> for RawCommand<'a> {
-    fn parse(raw: RawCommand<'a>) -> Result<Self, ParseError<'a>> {
-        Ok(raw)
+impl<'a> FromCommand<'a> for RawCommand<'a> {
+    fn parse(name: &'a str, args: Args<'a>) -> Result<Self, ParseError<'a>> {
+        Ok(RawCommand { name, args })
     }
 }
 
@@ -138,7 +126,8 @@ impl<'a> FromRaw<'a> for RawCommand<'a> {
 mod tests {
     use rstest::rstest;
 
-    use crate::{arguments::ArgList, command::RawCommand, token::Tokens};
+    use crate::command::FromCommand;
+    use crate::{arguments::Args, command::RawCommand, token::Tokens};
 
     #[rstest]
     #[case("set led 1", "set", "led 1")]
@@ -149,27 +138,18 @@ mod tests {
         let mut input = input.as_bytes().to_vec();
         let input = core::str::from_utf8_mut(&mut input).unwrap();
         let input_tokens = Tokens::new(input);
+        let (input_name, input_tokens) = input_tokens.split_first().unwrap();
+        let input_args = Args::new(input_tokens);
         let mut args = args.as_bytes().to_vec();
         let args = core::str::from_utf8_mut(&mut args).unwrap();
         let arg_tokens = Tokens::new(args);
 
         assert_eq!(
-            RawCommand::from_tokens(&input_tokens).unwrap(),
+            RawCommand::parse(input_name, input_args).unwrap(),
             RawCommand {
                 name: name,
-                args: ArgList::new(arg_tokens)
+                args: Args::new(arg_tokens)
             }
         );
-    }
-
-    #[rstest]
-    #[case("   ")]
-    #[case("")]
-    fn parsing_none(#[case] input: &str) {
-        let mut input = input.as_bytes().to_vec();
-        let input = core::str::from_utf8_mut(&mut input).unwrap();
-        let tokens = Tokens::new(input);
-
-        assert!(RawCommand::from_tokens(&tokens).is_none());
     }
 }

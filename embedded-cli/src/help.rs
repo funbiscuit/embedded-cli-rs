@@ -1,32 +1,84 @@
-use crate::{arguments::Arg, command::RawCommand};
+#[cfg(feature = "help")]
+use {
+    crate::arguments::{Arg, Args},
+    crate::writer::Writer,
+    embedded_io::Write,
+};
 
+#[derive(Debug)]
+pub enum HelpError<E: embedded_io::Error> {
+    WriteError(E),
+    UnknownCommand,
+}
+
+impl<E: embedded_io::Error> From<E> for HelpError<E> {
+    fn from(value: E) -> Self {
+        Self::WriteError(value)
+    }
+}
+
+// trait is kept available so it's possible to use same where clause
+pub trait Help {
+    #[cfg(feature = "help")]
+    /// How many commands are known
+    fn command_count() -> usize;
+
+    #[cfg(feature = "help")]
+    /// Print all commands and short description of each
+    fn list_commands<W: Write<Error = E>, E: embedded_io::Error>(
+        writer: &mut Writer<'_, W, E>,
+    ) -> Result<(), E>;
+
+    #[cfg(feature = "help")]
+    /// Print help for given command. Arguments might contain -h or --help options
+    /// Use given writer to print help text
+    /// If help request cannot be processed by this object,
+    /// Err(HelpError::UnknownCommand) must be returned
+    fn command_help<
+        W: Write<Error = E>,
+        E: embedded_io::Error,
+        F: FnMut(&mut Writer<'_, W, E>) -> Result<(), E>,
+    >(
+        parent: &mut F,
+        name: &str,
+        args: Args<'_>,
+        writer: &mut Writer<'_, W, E>,
+    ) -> Result<(), HelpError<E>>;
+}
+
+#[cfg(feature = "help")]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum HelpRequest<'a> {
+pub(crate) enum HelpRequest<'a> {
     /// Show list of all available commands
     All,
 
     /// Show help for specific command with arguments
     /// One of command arguments might be -h or --help
-    Command(RawCommand<'a>),
+    Command { name: &'a str, args: Args<'a> },
 }
 
+#[cfg(feature = "help")]
 impl<'a> HelpRequest<'a> {
-    /// Tries to create new help request from raw command
-    pub fn from_command(command: &RawCommand<'a>) -> Option<Self> {
-        let mut args = command.args().args();
-        if command.name() == "help" {
-            match args.next() {
-                Some(Arg::Value(name)) => {
-                    let command = RawCommand::new(name, args.into_args());
-                    Some(HelpRequest::Command(command))
-                }
-                None => Some(HelpRequest::All),
-                _ => None,
+    /// Tries to create new help request from command name and arguments
+    pub fn from_command(name: &'a str, args: &Args<'a>) -> Option<Self> {
+        let mut args_iter = args.iter();
+        if name == "help" {
+            match args_iter.next() {
+                Some(Arg::Value(name)) => Some(HelpRequest::Command {
+                    name,
+                    args: args_iter.into_args(),
+                }),
+                _ => Some(HelpRequest::All),
             }
         }
         // check if any other option is -h or --help
-        else if args.any(|arg| arg == Arg::LongOption("help") || arg == Arg::ShortOption('h')) {
-            Some(HelpRequest::Command(command.clone()))
+        else if args_iter
+            .any(|arg| arg == Arg::LongOption("help") || arg == Arg::ShortOption('h'))
+        {
+            Some(HelpRequest::Command {
+                name,
+                args: args.clone(),
+            })
         } else {
             None
         }
@@ -37,15 +89,15 @@ impl<'a> HelpRequest<'a> {
 mod tests {
     use rstest::rstest;
 
-    use crate::{arguments::ArgList, command::RawCommand, token::Tokens};
+    use crate::{arguments::Args, token::Tokens};
 
     use super::HelpRequest;
 
     fn help_command(name: &'static str, args: &'static str) -> HelpRequest<'static> {
-        HelpRequest::Command(RawCommand::new(
+        HelpRequest::Command {
             name,
-            ArgList::new(Tokens::from_raw(args, args.is_empty())),
-        ))
+            args: Args::new(Tokens::from_raw(args, args.is_empty())),
+        }
     }
 
     #[rstest]
@@ -62,9 +114,10 @@ mod tests {
         let mut input = input.as_bytes().to_vec();
         let input = core::str::from_utf8_mut(&mut input).unwrap();
         let tokens = Tokens::new(input);
-        let command = RawCommand::from_tokens(&tokens).unwrap();
+        let (name, tokens) = tokens.split_first().unwrap();
+        let args = Args::new(tokens);
 
-        assert_eq!(HelpRequest::from_command(&command), Some(expected));
+        assert_eq!(HelpRequest::from_command(name, &args), Some(expected));
     }
 
     #[rstest]
@@ -75,8 +128,9 @@ mod tests {
         let mut input = input.as_bytes().to_vec();
         let input = core::str::from_utf8_mut(&mut input).unwrap();
         let tokens = Tokens::new(input);
-        let command = RawCommand::from_tokens(&tokens).unwrap();
-        let res = HelpRequest::from_command(&command);
+        let (name, tokens) = tokens.split_first().unwrap();
+        let args = Args::new(tokens);
+        let res = HelpRequest::from_command(name, &args);
 
         assert!(res.is_none());
     }

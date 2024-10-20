@@ -12,6 +12,8 @@ struct GroupAttrs {
 pub struct CommandGroup {
     pub ident: Ident,
     pub field_type: Type,
+
+    #[allow(dead_code)]
     pub hidden: bool,
 }
 

@@ -3,7 +3,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput};
 
-use crate::{processor, utils::TargetType};
+use crate::utils::TargetType;
 
 use self::model::Command;
 
@@ -64,9 +64,8 @@ pub fn derive_command(input: DeriveInput) -> Result<TokenStream> {
     let derive_from_raw = if opts.skip_from_raw {
         quote! {}
     } else {
-        parse::derive_from_raw(&target, &commands)?
+        parse::derive_from_command(&target, &commands)?
     };
-    let impl_processor = processor::impl_processor(&target)?;
 
     let output = quote! {
         #derive_autocomplete
@@ -74,8 +73,6 @@ pub fn derive_command(input: DeriveInput) -> Result<TokenStream> {
         #derive_help
 
         #derive_from_raw
-
-        #impl_processor
     };
 
     Ok(output)

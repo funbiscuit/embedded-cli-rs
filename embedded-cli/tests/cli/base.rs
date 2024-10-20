@@ -32,6 +32,34 @@ fn simple_input() {
 }
 
 #[test]
+fn empty_input() {
+    let mut cli = CliWrapper::default();
+
+    assert_terminal!(cli.terminal(), 2, vec!["$"]);
+
+    cli.send_enter();
+    cli.send_enter();
+
+    assert_terminal!(cli.terminal(), 2, vec!["$", "$", "$"]);
+
+    cli.process_str("set led");
+
+    assert_terminal!(cli.terminal(), 9, vec!["$", "$", "$ set led"]);
+
+    assert!(cli.received_commands().is_empty());
+
+    cli.send_enter();
+    assert_terminal!(cli.terminal(), 2, vec!["$", "$", "$ set led", "$"]);
+    assert_eq!(
+        cli.received_commands(),
+        vec![Ok(RawCommand {
+            name: "set".to_string(),
+            args: vec![Arg::Value("led".to_string())],
+        })]
+    );
+}
+
+#[test]
 fn delete_with_backspace() {
     let mut cli = CliWrapper::default();
 

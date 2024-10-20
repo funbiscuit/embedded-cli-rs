@@ -94,6 +94,15 @@ impl<'a> Tokens<'a> {
     pub fn is_empty(&self) -> bool {
         self.empty
     }
+
+    pub fn split_first(self) -> Option<(&'a str, Tokens<'a>)> {
+        let mut iter = self.iter();
+        if let Some(first) = iter.next() {
+            Some((first, iter.into_tokens()))
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
