@@ -27,7 +27,7 @@ impl<const SIZE: usize> Buffer for [u8; SIZE] {
     }
 }
 
-impl<'a> Buffer for &'a mut [u8] {
+impl Buffer for &mut [u8] {
     fn as_slice(&self) -> &[u8] {
         self
     }

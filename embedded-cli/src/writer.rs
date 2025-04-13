@@ -11,7 +11,7 @@ pub struct Writer<'a, W: Write<Error = E>, E: Error> {
     writer: &'a mut W,
 }
 
-impl<'a, W: Write<Error = E>, E: Error> Debug for Writer<'a, W, E> {
+impl<W: Write<Error = E>, E: Error> Debug for Writer<'_, W, E> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Writer")
             .field("last_bytes", &self.last_bytes)
@@ -98,7 +98,7 @@ impl<'a, W: Write<Error = E>, E: Error> Writer<'a, W, E> {
     }
 }
 
-impl<'a, W: Write<Error = E>, E: Error> uWrite for Writer<'a, W, E> {
+impl<W: Write<Error = E>, E: Error> uWrite for Writer<'_, W, E> {
     type Error = E;
 
     fn write_str(&mut self, s: &str) -> Result<(), E> {
@@ -106,7 +106,7 @@ impl<'a, W: Write<Error = E>, E: Error> uWrite for Writer<'a, W, E> {
     }
 }
 
-impl<'a, W: Write<Error = E>, E: Error> core::fmt::Write for Writer<'a, W, E> {
+impl<W: Write<Error = E>, E: Error> core::fmt::Write for Writer<'_, W, E> {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         self.write_str(s).map_err(|_| core::fmt::Error)?;
         Ok(())

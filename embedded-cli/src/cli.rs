@@ -56,7 +56,7 @@ where
     }
 }
 
-impl<'a, W, E> Debug for CliHandle<'a, W, E>
+impl<W, E> Debug for CliHandle<'_, W, E>
 where
     W: Write<Error = E>,
     E: embedded_io::Error,

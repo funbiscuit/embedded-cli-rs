@@ -51,7 +51,7 @@ impl<'a> From<FromArgumentError<'a>> for ParseError<'a> {
     }
 }
 
-impl<'a, E: embedded_io::Error> From<E> for ProcessError<'a, E> {
+impl<E: embedded_io::Error> From<E> for ProcessError<'_, E> {
     fn from(value: E) -> Self {
         Self::WriteError(value)
     }

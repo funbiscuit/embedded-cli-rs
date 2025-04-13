@@ -68,7 +68,7 @@ impl Terminal {
             };
 
             if let Some(normal) = normal {
-                for c in normal.chars().into_iter() {
+                for c in normal.chars() {
                     match c {
                         '\r' => {
                             cursor = 0;
@@ -80,16 +80,13 @@ impl Terminal {
                         c if c >= ' ' => {
                             let current = output.last_mut().unwrap();
                             if current.chars().count() > cursor {
-                                current
-                                    .remove(current.char_indices().skip(cursor).next().unwrap().0);
+                                current.remove(current.char_indices().nth(cursor).unwrap().0);
                             } else {
                                 while current.chars().count() < cursor {
                                     current.push(' ');
                                 }
                             }
-                            if let Some((insert_pos, _)) =
-                                current.char_indices().skip(cursor).next()
-                            {
+                            if let Some((insert_pos, _)) = current.char_indices().nth(cursor) {
                                 current.insert(insert_pos, c);
                             } else {
                                 current.push(c);
@@ -110,21 +107,18 @@ impl Terminal {
                     }
                     // cursor backward
                     "\x1B[D" => {
-                        if cursor > 0 {
-                            cursor -= 1;
-                        }
+                        cursor = cursor.saturating_sub(1);
                     }
                     // delete char
                     "\x1B[P" => {
                         if current.chars().count() > cursor {
-                            current.remove(current.char_indices().skip(cursor).next().unwrap().0);
+                            current.remove(current.char_indices().nth(cursor).unwrap().0);
                         }
                     }
                     // insert char
                     "\x1B[@" => {
                         if current.chars().count() > cursor {
-                            current
-                                .insert(current.char_indices().skip(cursor).next().unwrap().0, ' ');
+                            current.insert(current.char_indices().nth(cursor).unwrap().0, ' ');
                         }
                     }
                     // clear whole line

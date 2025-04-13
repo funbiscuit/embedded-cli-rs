@@ -46,7 +46,7 @@ impl<'a> ArgList<'a> {
     }
 }
 
-impl<'a> PartialEq for ArgList<'a> {
+impl PartialEq for ArgList<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.args().eq(other.args())
     }

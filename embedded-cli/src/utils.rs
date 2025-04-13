@@ -123,9 +123,7 @@ pub fn encode_utf8(ch: char, buf: &mut [u8]) -> &str {
 
     buf[0] = code as u8 | first_b_mask;
 
-    unsafe {
-        return core::str::from_utf8_unchecked(&buf[..len]);
-    }
+    unsafe { core::str::from_utf8_unchecked(&buf[..len]) }
 }
 
 pub fn trim_start(input: &str) -> &str {

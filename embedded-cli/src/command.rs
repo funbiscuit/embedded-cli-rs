@@ -92,14 +92,14 @@ impl<'a> RawCommand<'a> {
     }
 }
 
-impl<'a> Autocomplete for RawCommand<'a> {
+impl Autocomplete for RawCommand<'_> {
     #[cfg(feature = "autocomplete")]
     fn autocomplete(_: Request<'_>, _: &mut Autocompletion<'_>) {
         // noop
     }
 }
 
-impl<'a> Help for RawCommand<'a> {
+impl Help for RawCommand<'_> {
     #[cfg(feature = "help")]
     fn command_count() -> usize {
         0
@@ -156,7 +156,7 @@ mod tests {
         assert_eq!(
             RawCommand::from_tokens(&input_tokens).unwrap(),
             RawCommand {
-                name: name,
+                name,
                 args: ArgList::new(arg_tokens)
             }
         );

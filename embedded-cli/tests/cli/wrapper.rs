@@ -55,7 +55,7 @@ macro_rules! impl_convert {
             }
         }
 
-        impl crate::wrapper::CommandConvert for $to_ty {
+        impl $crate::wrapper::CommandConvert for $to_ty {
             fn convert(
                 cmd: embedded_cli::command::RawCommand<'_>,
             ) -> Result<Self, crate::wrapper::ParseError> {
@@ -153,7 +153,7 @@ impl<'a> From<CliParseError<'a>> for ParseError {
                 Self::UnexpectedLongOption { name: name.into() }
             }
             CliParseError::UnexpectedShortOption { name } => {
-                Self::UnexpectedShortOption { name: name.into() }
+                Self::UnexpectedShortOption { name: name }
             }
             CliParseError::UnknownCommand => Self::UnknownCommand,
             _ => Self::Other,
