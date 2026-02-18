@@ -14,7 +14,7 @@ bench = false
 embedded-cli = { path = "../../embedded-cli", features = ["macros"] }
 
 avr-progmem = "0.4.0"
-embedded-io = "0.6.1"
+embedded-io = "0.7.1"
 panic-halt = "0.2.0"
 ufmt = "0.2.0"
 nb = "1.1.0"

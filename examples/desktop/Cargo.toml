@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 embedded-cli = { path = "../../embedded-cli" }
-embedded-io = "0.6.1"
+embedded-io = "0.7.1"
 rand = "0.8.5"
 termion = "3.0.0"
 ufmt = "0.2.0"
