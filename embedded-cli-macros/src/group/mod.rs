@@ -11,6 +11,7 @@ mod command_group;
 
 pub fn derive_command_group(input: DeriveInput) -> Result<TokenStream> {
     let DeriveInput {
+        vis,
         ident,
         data,
         generics,
@@ -36,7 +37,7 @@ pub fn derive_command_group(input: DeriveInput) -> Result<TokenStream> {
     let derive_autocomplete = derive_autocomplete(&target, &groups);
     let derive_help = derive_help(&target, &groups);
     let derive_from_raw = derive_from_raw(&target, &groups);
-    let impl_processor = processor::impl_processor(&target)?;
+    let impl_processor = processor::impl_processor(&vis, &target)?;
 
     let output = quote! {
         #derive_autocomplete

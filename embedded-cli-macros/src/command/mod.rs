@@ -27,6 +27,7 @@ struct ServiceAttrs {
 pub fn derive_command(input: DeriveInput) -> Result<TokenStream> {
     let opts = ServiceAttrs::from_derive_input(&input)?;
     let DeriveInput {
+        vis,
         ident,
         data,
         generics,
@@ -66,7 +67,7 @@ pub fn derive_command(input: DeriveInput) -> Result<TokenStream> {
     } else {
         parse::derive_from_raw(&target, &commands)?
     };
-    let impl_processor = processor::impl_processor(&target)?;
+    let impl_processor = processor::impl_processor(&vis, &target)?;
 
     let output = quote! {
         #derive_autocomplete
