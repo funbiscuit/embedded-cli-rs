@@ -1,10 +1,11 @@
 use darling::Result;
 use proc_macro2::TokenStream;
 use quote::quote;
+use syn::Visibility;
 
 use crate::utils::TargetType;
 
-pub fn impl_processor(target: &TargetType) -> Result<TokenStream> {
+pub fn impl_processor(vis: &Visibility, target: &TargetType) -> Result<TokenStream> {
     let ident = target.ident();
     let named_lifetime = target.named_lifetime();
     let unnamed_lifetime = target.unnamed_lifetime();
@@ -12,7 +13,7 @@ pub fn impl_processor(target: &TargetType) -> Result<TokenStream> {
     let output = quote! {
 
         impl #named_lifetime #ident #named_lifetime {
-            fn processor<
+            #vis fn processor<
                 W: _io::Write<Error = E>,
                 E: _io::Error,
                 F: FnMut(&mut _cli::cli::CliHandle<'_, W, E>, #ident #unnamed_lifetime) -> Result<(), E>,
