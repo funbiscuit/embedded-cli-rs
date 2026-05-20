@@ -77,7 +77,6 @@ enum NavigateInput {
     Forward,
 }
 
-#[doc(hidden)]
 pub struct Cli<W: Write<Error = E>, E: Error, CommandBuffer: Buffer, HistoryBuffer: Buffer> {
     editor: Option<Editor<CommandBuffer>>,
     #[cfg(feature = "history")]
