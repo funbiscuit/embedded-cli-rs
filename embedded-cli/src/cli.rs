@@ -276,6 +276,12 @@ where
                     self.writer.flush_bytes(codes::DELETE_CHAR)?;
                 }
             }
+            ControlInput::Delete => {
+                if editor.cursor() < editor.len() {
+                    editor.remove();
+                    self.writer.flush_bytes(codes::DELETE_CHAR)?;
+                }
+            }
             ControlInput::Down =>
             {
                 #[cfg(feature = "history")]

@@ -5,6 +5,7 @@ use crate::{codes, utf8::Utf8Accum};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ControlInput {
     Backspace,
+    Delete,
     Down,
     Enter,
     Back,
@@ -50,7 +51,7 @@ impl InputGenerator {
         let last_byte = self.last_byte;
         self.last_byte = byte;
         if self.flags.contains(Flags::CSI_STARTED) {
-            self.process_csi(byte).map(Input::Control)
+            self.process_csi(byte, last_byte).map(Input::Control)
         } else if last_byte == codes::ESCAPE && byte == b'[' {
             self.flags.set(Flags::CSI_STARTED, true);
             None
@@ -59,15 +60,16 @@ impl InputGenerator {
         }
     }
 
-    fn process_csi(&mut self, byte: u8) -> Option<ControlInput> {
+    fn process_csi(&mut self, byte: u8, last_byte: u8) -> Option<ControlInput> {
         // skip all parameter bytes and process only last byte in CSI sequence
         if (0x40..=0x7E).contains(&byte) {
             self.flags.set(Flags::CSI_STARTED, false);
-            let control = match byte {
-                b'A' => ControlInput::Up,
-                b'B' => ControlInput::Down,
-                b'C' => ControlInput::Forward,
-                b'D' => ControlInput::Back,
+            let control = match (last_byte, byte) {
+                (_, b'A') => ControlInput::Up,
+                (_, b'B') => ControlInput::Down,
+                (_, b'C') => ControlInput::Forward,
+                (_, b'D') => ControlInput::Back,
+                (b'3', b'~') => ControlInput::Delete,
                 _ => return None,
             };
             Some(control)
@@ -79,6 +81,10 @@ impl InputGenerator {
     fn process_single(&mut self, byte: u8, last_byte: u8) -> Option<Input<'_>> {
         let control = match byte {
             codes::BACKSPACE => ControlInput::Backspace,
+            #[cfg(feature = "del_is_bs")]
+            codes::DELETE => ControlInput::Backspace,
+            #[cfg(not(feature = "del_is_bs"))]
+            codes::DELETE => ControlInput::Delete,
 
             // ignore \r if \n already received (and converted to Enter)
             codes::CARRIAGE_RETURN if last_byte != codes::LINE_FEED => ControlInput::Enter,
@@ -109,6 +115,7 @@ mod tests {
     #[case(b"\x1B[24B", ControlInput::Down)]
     #[case(b"\x1B[C", ControlInput::Forward)]
     #[case(b"\x1B[D", ControlInput::Back)]
+    #[case(b"\x1B[3~", ControlInput::Delete)]
     fn process_csi_control(#[case] bytes: &[u8], #[case] expected: ControlInput) {
         let mut accum = InputGenerator::new();
 
@@ -131,6 +138,24 @@ mod tests {
         assert_eq!(
             InputGenerator::new().accept(byte),
             Some(Input::Control(expected))
+        )
+    }
+
+    #[test]
+    #[cfg(feature = "del_is_bs")]
+    fn process_delete_as_bs() {
+        assert_eq!(
+            InputGenerator::new().accept(crate::codes::DELETE),
+            Some(Input::Control(ControlInput::Backspace))
+        )
+    }
+
+    #[test]
+    #[cfg(not(feature = "del_is_bs"))]
+    fn process_delete_as_del() {
+        assert_eq!(
+            InputGenerator::new().accept(crate::codes::DELETE),
+            Some(Input::Control(ControlInput::Delete))
         )
     }
 

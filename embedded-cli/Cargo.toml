@@ -19,6 +19,7 @@ macros = ["embedded-cli-macros"]
 autocomplete = ["embedded-cli-macros/autocomplete"]
 help = ["embedded-cli-macros/help"]
 history = []
+del_is_bs = []
 
 [dependencies]
 embedded-cli-macros = { version = "0.2.1", path = "../embedded-cli-macros", optional = true }

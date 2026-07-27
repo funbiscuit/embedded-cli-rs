@@ -55,6 +55,30 @@ fn delete_with_backspace() {
 }
 
 #[test]
+fn delete_with_delete_key() {
+    let mut cli = CliWrapper::default();
+
+    cli.process_str("set");
+    assert_terminal!(cli.terminal(), 5, vec!["$ set"]);
+
+    cli.send_left();
+    cli.send_left();
+    assert_terminal!(cli.terminal(), 3, vec!["$ set"]);
+
+    // forward delete 'e'
+    cli.send_delete();
+    assert_terminal!(cli.terminal(), 3, vec!["$ st"]);
+
+    // forward delete 't'
+    cli.send_delete();
+    assert_terminal!(cli.terminal(), 3, vec!["$ s"]);
+
+    // try forward delete at the end of the editor (should do nothing)
+    cli.send_delete();
+    assert_terminal!(cli.terminal(), 3, vec!["$ s"]);
+}
+
+#[test]
 fn move_insert() {
     let mut cli = CliWrapper::default();
 

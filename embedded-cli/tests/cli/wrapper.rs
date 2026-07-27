@@ -234,6 +234,10 @@ impl<T: Autocomplete + Help + CommandConvert + Clone> CliWrapper<T> {
         self.process_str("\x08")
     }
 
+    pub fn send_delete(&mut self) {
+        self.process_str("\x1B[3~")
+    }
+
     pub fn send_down(&mut self) {
         self.process_str("\x1B[B")
     }
