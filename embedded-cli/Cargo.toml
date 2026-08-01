@@ -21,12 +21,16 @@ help = ["embedded-cli-macros/help"]
 history = []
 del_is_bs = []
 
+async = ["embedded-cli-macros/async"]
+
 [dependencies]
 embedded-cli-macros = { version = "0.2.1", path = "../embedded-cli-macros", optional = true }
 
 bitflags = "2.5.0"
 embedded-io = "0.7.1"
 ufmt = "0.2.0"
+maybe-async-cfg2 = "0.3.0"
+embedded-io-async = "0.7.0"
 
 [dev-dependencies]
 regex = "1.10.4"

@@ -1,0 +1,12 @@
+[package]
+name = "desktop_async"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+embedded-cli = { path = "../../embedded-cli", features = ["async"] }
+embedded-io = "0.7.1"
+rand = "0.8.5"
+termion = "3.0.0"
+tokio = { version = "1.53.1", features = ["full"] }
+ufmt = "0.2.0"

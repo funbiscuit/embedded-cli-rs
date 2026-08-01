@@ -20,6 +20,8 @@ default = []
 autocomplete = []
 help = []
 
+async = []
+
 [dependencies]
 convert_case = "0.6.0"
 darling = "0.20.8"

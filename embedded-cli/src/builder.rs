@@ -4,6 +4,9 @@ use embedded_io::{Error, Write};
 
 use crate::{buffer::Buffer, cli::Cli, writer::EmptyWriter};
 
+#[cfg(feature = "async")]
+use crate::cli::CliAsync;
+
 pub const DEFAULT_CMD_LEN: usize = 40;
 pub const DEFAULT_HISTORY_LEN: usize = 100;
 pub const DEFAULT_PROMPT: &str = "$ ";
@@ -39,6 +42,11 @@ where
 {
     pub fn build(self) -> Result<Cli<W, E, CommandBuffer, HistoryBuffer>, E> {
         Cli::from_builder(self)
+    }
+
+    #[cfg(feature = "async")]
+    pub fn build_async(self) -> Result<CliAsync<W, E, CommandBuffer, HistoryBuffer>, E> {
+        CliAsync::from_builder(self)
     }
 
     pub fn command_buffer<B: Buffer>(
